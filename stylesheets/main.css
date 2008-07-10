@@ -40,6 +40,10 @@ body {
   font-size: .75em;
 }
 
+.centered {
+  text-align: center;
+}
+
 .update_message {
   color: #ccc;
 }
