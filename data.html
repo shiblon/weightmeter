@@ -1,0 +1,32 @@
+<html>
+  <head>
+    <title>Weight Meter Data Manager</title>
+    <link rel="stylesheet" href="/stylesheets/main.css">
+  </head>
+  <body>
+    <div id="header_div" class="tiny">
+      {{ user_name }} |
+      <a href="{{ index_url }}">Home</a> |
+      Data |
+      <a href="{{ settings_url }}">Settings</a> |
+      <a href="{{ logout_url }}">Logout</a>
+    </div>
+    <p><a href="{{ csv_link }}">Get data as csv</a></p>
+    <form action="/data" method="POST" enctype="multipart/form-data">
+      Upload a csv-formatted file of weight entries.  Format is
+      <pre>
+      2008-04-01,192.5
+      2008-04-02,193.0
+      ...</pre>
+
+      Dates can be in either YYYY-MM-DD or MM/DD/YYYY format<br>
+      <input type="file" name="entries_csv_file">
+      <br>
+      <br>
+      Alternatively, paste csv contents here (note, you can do both at once if you really want to):<br>
+      <textarea name="entries_csv_text" cols="50" rows="10"></textarea>
+      <br>
+      <input type="submit" value="Add Data">
+    </form>
+  </body>
+</html>

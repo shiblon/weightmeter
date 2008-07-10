@@ -1,0 +1,45 @@
+body {
+  font-family: Verdana, Helvetica, arial, sans-serif;
+  font-size: 0.75em;
+  background-color: #fff;
+  margin-top: 0em;
+  margin-left: 1em;
+  margin-right: 1em;
+}
+
+#header_div {
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+}
+
+#img_div {
+  border-color: #ddd;
+  border-width: 1px;
+  border-style: solid;
+  padding: 2px;
+  margin-top: .5em;
+  margin-bottom: .5em;
+}
+
+.graph_link_text {
+  color: #aaa;
+  width: 100%;
+  text-align: center;
+}
+
+.selected_link {
+  font-weight: bold;
+}
+
+.graph_link {
+  font-size: 1em;
+  font-variant: normal;
+}
+
+.tiny {
+  font-size: .75em;
+}
+
+.update_message {
+  color: #ccc;
+}

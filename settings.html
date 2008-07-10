@@ -1,0 +1,32 @@
+<html>
+  <head>
+    <title>Weight Meter Settings</title>
+    <link rel="stylesheet" href="/stylesheets/main.css">
+  </head>
+  <body>
+    <div id="header_div" class="tiny">
+      {{ user_name }} |
+      <a href="{{ index_url }}">Home</a> |
+      <a href="{{ data_url }}">Data</a> |
+      Settings |
+      <a href="{{ logout_url }}">Logout</a>
+    </div>
+    <form action="/settings" method="POST">
+      Decay Weight:
+      <select name="gamma">
+        {% for opt in gamma_options %}
+        <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.value }}</option>
+        {% endfor %}
+      </select>
+      <br>
+      Scale Resolution:
+      <select name="resolution">
+        {% for opt in resolution_options %}
+        <option value="{{ opt.value}}"{% if opt.selected %} selected{% endif %}>{{ opt.value }}</option>
+        {% endfor %}
+        <option
+      </select>
+      <br>
+      <input type="submit" value="Update"> {% ifequal state 'complete' %}<span class="update_message">Update Completed</span>{% endifequal %}
+  </body>
+</html>
