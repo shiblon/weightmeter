@@ -397,7 +397,7 @@ class AddEntry(webapp.RequestHandler):
     try:
       weight = float(self.request.get('weight'))
     except ValueError, e:
-      logging.error("Invalid weight specified: %r" % weight)
+      logging.error("Invalid weight specified: %r" % self.request.get('weight')
       error = True
 
     if not error:
