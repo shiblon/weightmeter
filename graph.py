@@ -153,13 +153,15 @@ def sample_entries(entry_iter, start_date, end_date, num_samples):
     else:
       yield end_date, weight_sum / num_weights
 
-def decaying_average_iter(entry_iter, gamma=None, propagate_missing=False):
+def decaying_average_iter(
+    entry_iter, start=None, gamma=None, propagate_missing=False):
   """Produce *entry, running_average data for each entry
 
   Produces an exponentially weighted decaying average for every entry.
 
   Args:
     entry_iter: an iterator over date,weight pairs
+    start: start value for decayed average (will be the first value)
     gamma: the multiplier to use for exponentially weighted smoothing (0.9)
     propagate_missing (False): if True, a None value in the data produces a
         None value in the average.  Otherwise, it simply leaves the average
@@ -172,7 +174,7 @@ def decaying_average_iter(entry_iter, gamma=None, propagate_missing=False):
   if gamma is None:
     gamma = 0.9
 
-  smoothed = None
+  smoothed = start
   for date, weight in entry_iter:
     if smoothed is None:
       smoothed = weight
@@ -289,7 +291,7 @@ def date_labels(dates):
   return [d.strftime(format) for d in dates]
 
 def chartserver_data_params(entries, width=None, height=None):
-  """Create chartserver url parameters (everything after '?') from the data.
+  """Create chartserver url data parameters
 
   If you want to limit the number of samples received, you must sample *before*
   calling this function.  Also note that the chart is called as though there

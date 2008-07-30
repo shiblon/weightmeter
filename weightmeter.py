@@ -13,7 +13,7 @@ from StringIO import StringIO
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from graph import chartserver_data_params
 from graph import sample_entries
-from graph import decaying_average_iter
+from graph import decaying_average_iter, full_entry_iter
 
 from google.appengine.api import users
 from google.appengine.ext import webapp, db
@@ -22,6 +22,8 @@ from google.appengine.ext.webapp import template
 # Set constants
 DEFAULT_SELECT_DAYS = 14
 DEFAULT_POUND_SELECTION = 5
+
+DECAY_SETUP_DAYS = 14
 
 MOBILE_IMG_WIDTH = 300
 MOBILE_IMG_HEIGHT = 200
@@ -281,6 +283,20 @@ class Site(webapp.RequestHandler):
         self.request.get('e', '0'),
         self._today())
 
+    # Get a set of weights *before* the start date, and smooth them out until
+    # the decayed average has had a little time to ramp up.
+    # Note that it overlaps with the real sequence, because the start value is
+    # simply assigned to the first entry for decay calculations.
+    early_d1 = start_date - datetime.timedelta(days=DECAY_SETUP_DAYS)
+    early_d2 = start_date
+    early_smoothed = list(
+        decaying_average_iter(
+          full_entry_iter(
+            weight_data.query(early_d1, early_d2))))
+    start_smooth = None
+    if early_smoothed:
+      start_smooth = early_smoothed[-1][-1]
+
     # Get the sampled raw weights and smoothed function:
     smoothed_iter = decaying_average_iter(
         sample_entries(
@@ -288,7 +304,8 @@ class Site(webapp.RequestHandler):
           start_date,
           end_date,
           MAX_MOBILE_SAMPLES),
-        gamma=user_info.gamma
+        gamma=user_info.gamma,
+        start=start_smooth,
         )
 
     # Make a chart
