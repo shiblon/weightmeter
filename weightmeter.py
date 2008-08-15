@@ -25,6 +25,9 @@ from google.appengine.ext.webapp import template
 DEFAULT_SELECT_DAYS = 14
 DEFAULT_POUND_SELECTION = 2
 
+DEFAULT_ERROR_PATH = '/error'
+DEFAULT_REDIR_PATH = '/index'
+
 MOBILE_IMG_WIDTH = 300
 MOBILE_IMG_HEIGHT = 200
 
@@ -76,34 +79,34 @@ class Error(PathRequestHandler):
 
 class UpdateEntry(PathRequestHandler):
   path_regex = '/update'
-
-  default_error_path = '/error'
+  default_error_path = '/update'
+  default_redir_path = '/update'
 
   def POST(self):
     """Updates a single weight entry."""
     user_info = _get_current_user_info()
     weight_data = WeightData(user_info)
 
-    sanitizer = ParamSanitizer(self.request,
-                               ('date', ParamSanitizer.Date),
-                               ('weight', ParamSanitizer.Number),
-                               ('r', ParamSanitizer.URIPath, ''),
-                               ('e', ParamSanitizer.URIPath, ''),
-                               default_on_error=True)
+    form = ParamSanitizer(self.request,
+                          ('date', ParamSanitizer.Date),
+                          ('weight', ParamSanitizer.Number),
+                          ('r', ParamSanitizer.URIPath, ''),
+                          ('e', ParamSanitizer.URIPath, ''),
+                          default_on_error=True)
 
-    if sanitizer.failure():
-      logging.debug("Sanitizer failed on %r", sanitizer.failed)
-      self.redirect(sanitizer.failed_redirect_url(sanitizer.params['e'],
-                                                  sanitizer.params['r'],
-                                                  self.default_error_path))
+    if form.failure():
+      logging.debug("Sanitizer failed on %r", form.failed)
+      self.redirect(form.failed_redirect_url(form.params['e'],
+                                             form.params['r'],
+                                             self.default_error_path,
+                                             DEFAULT_ERROR_PATH))
     else:
-      date = sanitizer.params['date']
-      weight = sanitizer.params['weight']
-      redir_path = sanitizer.params['r']
-      logging.debug("redirect path = %s", redir_path)
-
+      date = form.params['date']
+      weight = form.params['weight']
       weight_data.update(date, weight)
-      self.redirect(redir_path)
+      self.safe_redirect(form.params['r'],
+                         self.default_redir_path,
+                         DEFAULT_REDIR_PATH)
 
 class MobileSite(PathRequestHandler):
   path_regex = '^/m(/.*|)'
@@ -277,6 +280,8 @@ class DataImport(PathRequestHandler):
   path_regex = '/data'
 
   def POST(self):
+    # TODO: use param sanitizer
+    # TODO: Create a CSV data sanitizer
     # TODO: verify that the file format is correct
     posted_data = ''
     
@@ -355,7 +360,7 @@ class DataImport(PathRequestHandler):
 
     self.redirect(self.request.get('redir_url', '/index'))
 
-  def get(self):
+  def GET(self):
     template_values = {
         'user_name': users.get_current_user().email(),
         'logout_url': users.create_logout_url(self.request.uri),
@@ -369,21 +374,38 @@ class DataImport(PathRequestHandler):
 
 class Settings(PathRequestHandler):
   path_regex = '/settings'
+  default_error_path = '/settings'
+  default_redir_path = '/settings'
 
   def POST(self):
     user_info = _get_current_user_info()
 
-    user_info.scale_resolution = float(self.request.get('resolution'))
-    user_info.gamma = float(self.request.get('gamma'))
+    form = ParamSanitizer(self.request,
+                          ('resolution', ParamSanitizer.Float),
+                          ('gamma', ParamSanitizer.Float),
+                          ('r', ParamSanitizer.URIPath, ''),
+                          ('e', ParamSanitizer.URIPath, ''),
+                          default_on_error=True)
 
-    user_info.put()
-
-    self.redirect('/settings?state=complete')
+    if form.failure():
+      logging.debug("Sanitizer failed on %r", form.failed)
+      self.redirect(form.failed_redirect_url(form.params['e'],
+                                             form.params['r'],
+                                             self.default_error_path,
+                                             DEFAULT_ERROR_PATH))
+    else:
+      user_info.scale_resolution = form.params['resolution']
+      user_info.gamma = form.params['gamma']
+      user_info.put()
+      self.safe_redirect(form.params['r'],
+                         self.default_redir_path,
+                         DEFAULT_REDIR_PATH,
+                         overrides={'state': 'success'})
 
   def GET(self):
     user_info = _get_current_user_info()
 
-    float_format = "%0.02f"
+    float_format = "%0.2f"
 
     # Decay weight options
     gamma_options = []

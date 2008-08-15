@@ -7,6 +7,7 @@ improvement.
 
 import logging
 import re
+from cgi import parse_qs
 from datetime import datetime
 from google.appengine.ext.webapp import RequestHandler
 from urlparse import urlsplit, urlparse, urlunparse
@@ -342,6 +343,8 @@ class PathRequestHandler(RequestHandler):
   """
 
   path_regex = None
+  default_error_path = ''
+  default_redir_path = ''
 
   @classmethod
   def wsgi_handler(cls):
@@ -350,16 +353,49 @@ class PathRequestHandler(RequestHandler):
 
     return cls.path_regex, cls
 
-  def safe_redirect(self, uri):
+  def safe_redirect(self, *uris, **kargs):
     """Redirect, but throws an exception if the uri has a scheme or domain
     
     params:
-      uri - relative path and query parameters
+      *uris - relative path and query parameters - a list - the first non-empty
+          one will be used.
+      overrides (keyword only): a dictionary of parameter overrides - a value
+          of None indicates that the parameter should be removed.
     """
-    scheme, domain, path, query, fragments = urlparse(uri)
+    # Find the first uri that is non-empty
+    for uri in uris:
+      if uri: break
+    else:
+      raise InvalidRequestURI("No non-empty URI specified");
+
+    scheme, domain, path, query, fragments = urlsplit(uri)
     if scheme or domain:
       raise InvalidRequestURI("Absolute URIs not allowed: %s" % uri)
 
+    # Parse the query, add overrides if there are any
+    overrides = kargs.get('overrides', None)
+    if overrides:
+      query_dict = parse_qs(query)
+      for k, v in overrides.iteritems():
+        if k in query_dict and v is None:
+            del query_dict[k]
+        else:
+          query_dict[escape_qp(k)] = escape_qp(v)
+      params = []
+      for k, v in query_dict.iteritems():
+        # Handle the possibility of an iterable (repeated parameters)
+        pieces = v
+        if isinstance(v, basestring):
+          pieces = [v]
+
+        # Add them all
+        for item in pieces:
+          params.append("%s=%s" % (k, item))
+      query = "&".join(params)
+
+    uri = urlunparse(('', '', path, '', query, ''))
+
+    logging.debug("safe redirect to %s", uri)
     return self.redirect(uri)
 
   def add_to_request_path(self, suffix):
