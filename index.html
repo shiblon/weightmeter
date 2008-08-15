@@ -12,6 +12,9 @@
       <a href="{{ logout_url }}">Logout</a>
     </div>
     <form method="POST" action="{{ update_url }}">
+      {% if has_error %}
+      <div class="form_error">There were errors in your entry.  It was not recorded.</div>
+      {% endif %}
     <select name="date" id="date_select">
       {% for date_item in date_items %}
       <option value="{{ date_item.date }}"{% if date_item.selected %} selected{% endif %}>{{ date_item.name }}</option>
@@ -36,7 +39,7 @@
       {% if not forloop.last %} |{% endif %}
       {% endfor %}
     </span>
-    <input type=submit value="Add">
+    <input type=submit value="Update">
     </form>
     <div id="img_div" style="width: {{ img.width }}px;">
     <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>

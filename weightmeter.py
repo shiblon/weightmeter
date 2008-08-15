@@ -68,10 +68,15 @@ def _date_range_from_params(start_param, end_param, today=None):
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
 
+class Error(PathRequestHandler):
+  path_regex = '/error'
+
+  def GET(self):
+    self.out.write("An error occurred while trying to go to an error page.")
+
 class UpdateEntry(PathRequestHandler):
   path_regex = '/update'
 
-  # TODO: fix this default error path
   default_error_path = '/error'
 
   def POST(self):
@@ -123,12 +128,11 @@ class MobileSite(PathRequestHandler):
       default_on_error=True)
 
     # Keep the error stuff separate since we may want to treat it differently
-    # (not propagate it to links on the page, etc.).
+    # (not propagate it to links on the page, etc.).  Default to None, an
+    # invalid error param string, so that success means that there is an error
+    # message parameter to do stuff with.
     error_sanitizer = ParamSanitizer(self.request,
-                                     ('E', ParamSanitizer.ErrorParams))
-
-    # TODO: if the error sanitizer succeeded, then we had an error and can
-    # display stuff by the form fields.
+                                     ('E', ParamSanitizer.ErrorParams, None))
 
     img_width = sanitizer.params['w']
     img_height = sanitizer.params['h']
@@ -228,6 +232,8 @@ class MobileSite(PathRequestHandler):
 
     # Output to the template
     template_values = {
+        'has_error': error_sanitizer.success(),
+        'error_params': error_sanitizer.params.get('E', None),
         'img': img,
         'settings_url': '/settings',
         'logout_url': users.create_logout_url(self.request.uri),
@@ -245,8 +251,9 @@ class MobileSite(PathRequestHandler):
     path = os.path.join(os.path.dirname(__file__), 'index.html')
     self.response.out.write(template.render(path, template_values))
 
-class DebugOutput(webapp.RequestHandler):
-  def get(self):
+class DebugOutput(PathRequestHandler):
+  path_regex = '/debug'
+  def GET(self):
     user_info = _get_current_user_info()
     query = WeightBlock.all()
     entries = []
@@ -266,8 +273,10 @@ class DebugOutput(webapp.RequestHandler):
     path = os.path.join(os.path.dirname(__file__), 'debug_index.html')
     self.response.out.write(template.render(path, template_values))
 
-class DataImport(webapp.RequestHandler):
-  def post(self):
+class DataImport(PathRequestHandler):
+  path_regex = '/data'
+
+  def POST(self):
     # TODO: verify that the file format is correct
     posted_data = ''
     
@@ -358,8 +367,10 @@ class DataImport(webapp.RequestHandler):
     path = os.path.join(os.path.dirname(__file__), 'data.html')
     self.response.out.write(template.render(path, template_values))
 
-class Settings(webapp.RequestHandler):
-  def post(self):
+class Settings(PathRequestHandler):
+  path_regex = '/settings'
+
+  def POST(self):
     user_info = _get_current_user_info()
 
     user_info.scale_resolution = float(self.request.get('resolution'))
@@ -369,7 +380,7 @@ class Settings(webapp.RequestHandler):
 
     self.redirect('/settings?state=complete')
 
-  def get(self):
+  def GET(self):
     user_info = _get_current_user_info()
 
     float_format = "%0.02f"
@@ -412,32 +423,10 @@ class Settings(webapp.RequestHandler):
     path = os.path.join(os.path.dirname(__file__), 'settings.html')
     self.response.out.write(template.render(path, template_values))
 
-class AddEntry(webapp.RequestHandler):
-  def post(self):
-    user_info = _get_current_user_info()
-    weight_data = WeightData(user_info)
-    datestr = self.request.get('date')
+class CsvDownload(PathRequestHandler):
+  path_regex = '/csv'
 
-    error = False
-    try:
-      date = datetime.datetime.strptime(datestr, "%Y-%m-%d").date()
-    except ValueError, e:
-      logging.error('Invalid date specified: %r', datestr)
-      error = True
-
-    try:
-      weight = float(self.request.get('weight'))
-    except ValueError, e:
-      logging.error("Invalid weight specified: %r", self.request.get('weight'))
-      error = True
-
-    if not error:
-      weight_data.update(date, weight)
-
-    self.redirect('/index');
-
-class CsvDownload(webapp.RequestHandler):
-  def get(self):
+  def GET(self):
     user_info = _get_current_user_info()
     weight_data = WeightData(user_info)
 
@@ -463,11 +452,11 @@ def main():
   application = webapp.WSGIApplication(
       [MobileSite.wsgi_handler(),
        UpdateEntry.wsgi_handler(),
-       ('/add_entry', AddEntry),
-       ('/settings', Settings),
-       ('/debug', DebugOutput),
-       ('/data', DataImport),
-       ('/csv', CsvDownload),
+       Settings.wsgi_handler(),
+       DebugOutput.wsgi_handler(),
+       DataImport.wsgi_handler(),
+       CsvDownload.wsgi_handler(),
+       Error.wsgi_handler(),
       ],
       debug=True)
   wsgiref.handlers.CGIHandler().run(application)

@@ -47,3 +47,7 @@ body {
 .update_message {
   color: #ccc;
 }
+
+.form_error {
+  color: #f55;
+}
