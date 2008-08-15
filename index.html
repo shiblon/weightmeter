@@ -11,7 +11,7 @@
       <a href="{{ settings_url }}">Settings</a> |
       <a href="{{ logout_url }}">Logout</a>
     </div>
-    <form method="POST" action="/add_entry">
+    <form method="POST" action="{{ update_url }}">
     <select name="date" id="date_select">
       {% for date_item in date_items %}
       <option value="{{ date_item.date }}"{% if date_item.selected %} selected{% endif %}>{{ date_item.name }}</option>

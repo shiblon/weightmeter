@@ -7,6 +7,7 @@ improvement.
 
 import logging
 import re
+from datetime import datetime
 from google.appengine.ext.webapp import RequestHandler
 from urlparse import urlsplit, urlparse, urlunparse
 
@@ -15,11 +16,21 @@ class InvalidRequestURI(ValueError): pass
 class InvalidParameter(ValueError):
   def __init__(self, value, *args, **kargs):
     super(InvalidParameter, self).__init__(*args)
-    logging.error("InvalidParameter: %s" % self.message)
     self.value = value
-    self.display = kargs.get('display')
+    self.display = kargs.get('display', '')
+    logging.error("InvalidParameter: %s, %s", self.message, self.display)
+
+  def __repr__(self):
+    s = super(InvalidParameter, self).__repr__()
+    return s + ' value: %r display: %r' % (self.value, self.display)
 
 class ErrorParams(object):
+  class Param(object):
+    def __init__(self, name, badval, display):
+      self.name = name
+      self.badval = badval
+      self.display = display
+
   def __init__(self, *params):
     """Accepts error information about parameters and stores it.
 
@@ -27,24 +38,23 @@ class ErrorParams(object):
       *params: each member is (name, badval, display_message)
     """
     self.params = {}
-    self.messages = {}
     for name, badval, display in params:
-      self.params[name] = badval
-      self.messages[name] = display
+      self.params[name] = self.Param(name, badval, display)
 
   @classmethod
   def fromstring(cls, pstr):
     """Parses a piece of a query string that has error information."""
     param_list = []
-    err_params = pstr.split('|')
-    for param in err_params:
-      param_parts = [unescape_query_parameter(x) for x in param.split(':')]
-      try:
-        name, val, msg = param_parts
-      except ValueError, e:
-        name, val = param_parts
-        msg = ''
-      param_list.append((name, val, msg))
+    if pstr:
+      err_params = pstr.split('|')
+      for param in err_params:
+        param_parts = [unescape_qp(x) for x in param.split(':')]
+        try:
+          name, val, msg = param_parts
+        except ValueError, e:
+          name, val = param_parts
+          msg = ''
+        param_list.append((name, val, msg))
     return cls(*param_list)
 
   def param_string(self):
@@ -63,16 +73,11 @@ class ErrorParams(object):
     Characters escaped (in addition to standard query specials) are ':|'
     """
     pieces = []
-    for name, exception in self.failed.iteritems():
-      e_name = escape_query_parameter(name)
-      e_value = escape_query_parameter(exception.value, ':|')
-      try:
-        e_display = escape_query_parameter(exception.display, ':|')
-      except AttributeError, e:
-        display = 'invalid value'
-
+    for name, param in self.params.iteritems():
+      e_name = escape_qp(param.name)
+      e_value = escape_qp(param.badval, ':|')
+      e_display = escape_qp(param.display or 'invalid value', ':|')
       pieces.append('%s:%s:%s' % (e_name, e_value, e_display))
-
     pieces.sort()
     return "|".join(pieces)
 
@@ -124,10 +129,9 @@ class ParamSanitizer(object):
       # Use a list here to make it easier to allow None as a valid value
       defaults = []
       if len(element) > 2:
-        defaults = element[2:]
-      assert 0 <= len(defaults) <= 1  # should be a single value
+        defaults = [str(element[2])]
 
-      val = self.request.get(param_name, *(str(x) for x in defaults))
+      val = self.request.get(param_name, *defaults)
       originals[param_name] = val
       try:
         sanitized_val = sanitizer(val)
@@ -146,7 +150,7 @@ class ParamSanitizer(object):
   def failure(self):
     return not not self.failed
 
-  def param_string(self, overrides):
+  def param_string(self, overrides=None):
     """Create a parameter string from the sanitized parameters.
 
     Any parameter can be overridden in **kargs.
@@ -158,21 +162,24 @@ class ParamSanitizer(object):
       parameter string (e.g., key=val&key2=val2)
     """
     pieces = []
+    if overrides is None:
+      overrides = {}
+
     for key, value in overrides.iteritems():
-      ekey = escape_query_parameter(key)
-      evalue = escape_query_parameter(value)
+      ekey = escape_qp(key)
+      evalue = escape_qp(value)
       pieces.append("%s=%s" % (ekey, evalue))
 
     for key, value in self.params.iteritems():
       if key in overrides:
         continue
-      ekey = escape_query_parameter(key)
-      evalue = escape_query_parameter(value)
+      ekey = escape_qp(key)
+      evalue = escape_qp(value)
       pieces.append("%s=%s" % (ekey, evalue))
     pieces.sort()
     return "&".join(pieces)
 
-  def redirect_string(self, path, overrides):
+  def redirect_string(self, path, overrides=None):
     """Create a redirect string from the path, the valid params, and overrides.
 
     Params:
@@ -206,7 +213,7 @@ class ParamSanitizer(object):
     error_name = kargs.get('error_name', 'E')
     for url in urls_to_try:
       if not url: continue
-      path, query = urlsplit(url)
+      path, query = urlsplit(url)[2:4]
       if query and not query.endswith('&'):
         query += '&'
       query += error_name + '=' + self.failed_param_string()
@@ -220,16 +227,8 @@ class ParamSanitizer(object):
     Uses ErrorParams object to do its work.
     """
     ep = ErrorParams(
-      *((n, e.value, e.display or '') for n, e in self.failed.iteritems()))
+      *((n, e.value, e.display) for n, e in self.failed.iteritems()))
     return str(ep)
-
-  @classmethod
-  def ErrorParamString(cls, pstr):
-    """Accepts error param strings as created by failed_param_string above.
-
-    Returns:
-      ErrorParam object
-    """
 
   @classmethod
   def Date(cls, datestr):
@@ -238,7 +237,7 @@ class ParamSanitizer(object):
     datestr = datestr.strip()
     for format in formats:
       try:
-        return datetime.datetime.strptime(datestr, format).date()
+        return datetime.strptime(datestr, format).date()
       except ValueError, e:
         pass
     else:
@@ -279,7 +278,7 @@ class ParamSanitizer(object):
   @classmethod
   def Number(cls, numstr):
     """Accepts real numbers (int, float, but not complex)"""
-    return cls.Type(numstr, int, long, float, "Number required")
+    return cls.Type(numstr, int, long, float, display="Number required")
 
   @classmethod
   def Float(cls, numstr):
@@ -291,7 +290,7 @@ class ParamSanitizer(object):
     """Accepts a URL, returns only the path and query (and fragment) parts"""
     scheme, netloc, path, params, query, fragment = urlparse(pathstr)
     if scheme or netloc:
-      logging.warn("Path specified with scheme or domain set: %s" % pathstr)
+      logging.warn("Path specified with scheme or domain set: %s", pathstr)
     # TODO: detect invalid urls?
     return urlunparse(['', '', path, params, query, fragment])
 
@@ -385,7 +384,7 @@ class PathRequestHandler(RequestHandler):
     groups in the path_regex.
     """
     path = "_".join(subparts).lower()
-    logging.info("Handler %s: %s: %s" % (self.__class__.__name__, method, path))
+    logging.info("Handler %s: %s: %s", self.__class__.__name__, method, path)
 
     # Change / to _ and dispatch
     call_path = path.replace('/', '_')
@@ -395,10 +394,10 @@ class PathRequestHandler(RequestHandler):
     while call_path.endswith('_'):
       call_path = call_path[:-1]
 
-    logging.info("call path " + call_path)
+    logging.info("call path %s", call_path)
 
     func_name = method.upper() + call_path
-    logging.info(func_name)
+    logging.info("%s", func_name)
 
     func = getattr(self, func_name, None)
     if func is not None:
@@ -412,20 +411,27 @@ class PathRequestHandler(RequestHandler):
   def post(self, *subparts):
     return self._dispatch_func('POST', *subparts)
 
-def unescape_query_parameter(param):
+def unescape_qp(param):
   pattern = r'%([0-9a-fA-F]{2})'
   return re.sub(pattern, lambda m: chr(int(m.group(1), 16)), param)
 
-def escape_query_parameter(param, to_escape=''):
+def escape_qp(param, to_escape=''):
   """Returns an escaped version of a failure param.
 
   params:
     param - parameter to escape
     to_escape - characters that will be escaped - in order
 
-  Before escaping, the to_escape string is prepended with '%#&=;'
+  Before escaping, the to_escape string is prepended with '%#?&=+;'
   """
-  pattern = r'[%s]' % re.escape(r'%#&=' + to_escape)
+  pattern = r'[%s]' % re.escape(r'%#?&=+;' + to_escape)
   # the hex function prepends everything with 0x, so we remove that (hence
   # the [2:] below) before prepending '%'
   return re.sub(pattern, lambda m: '%' + hex(ord(m.group(0)))[2:], str(param))
+
+def param_str(params):
+  """Create a parameter string from the dictionary of parameters"""
+  paramstrs = []
+  for k, v in params.iteritems():
+    paramstrs.append("%s=%s" % (escape_qp(k), escape_qp(v)))
+  return "&".join(paramstrs)

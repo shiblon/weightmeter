@@ -165,7 +165,7 @@ def chartserver_data_params(entries, width, height):
   # maximum resolution of 0.05 lbs (1/20 lb) is plenty (handles 0.25 and 0.1,
   # but probably overkill)
   max_unique_values = 20 * (mx - mn) + 1
-  logging.info("max unique: %d" % max_unique_values)
+  logging.info("max unique: %d", max_unique_values)
 
   data_param = 'chd='
   num_columns = len(data[0])
@@ -227,7 +227,7 @@ def chartserver_bounded_size(width, height):
   return width, height
 
 def chartserver_weight_url(width, height, smoothed_iter):
-  logging.debug("w=%d h=%d" % (width, height))
+  logging.debug("w=%d h=%d", width, height)
   params = [
       "chs=%dx%d" % (width, height),
       "cht=lc",

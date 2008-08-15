@@ -118,8 +118,8 @@ class WeightData(object):
 
     num_days = end_day - start_day
 
-    logging.debug("start_day %s" % start_day)
-    logging.debug("end_day %s" % end_day)
+    logging.debug("start_day %s", start_day)
+    logging.debug("end_day %s", end_day)
 
     start_day_zero = self._day_zero(start_day)
     end_day_zero = self._day_zero(end_day)
@@ -134,7 +134,7 @@ class WeightData(object):
     # Iterate over all of the non-empty dates from start_day to end_day within
     # the blocks:
     for block in query:
-      logging.debug("block %d" % block.day_zero)
+      logging.debug("block %d", block.day_zero)
       for rel_day, weight in enumerate(block.weight_entries):
         day = rel_day + block.day_zero
         if start_day <= day <= end_day and weight >= 0.0:
@@ -289,12 +289,12 @@ def sample_entries(entry_iter, start_date, end_date, num_samples):
   if date is None:
     return
 
-  logging.debug("real start date: %r" % date)
+  logging.debug("real start date: %r", date)
   start_date = date
 
   num_dates = end_date.toordinal() - start_date.toordinal() + 1
 
-  logging.debug("num dates: %d" % num_dates)
+  logging.debug("num dates: %d", num_dates)
 
   # If there is no need to sample, don't bother, just yield the values.
   if num_samples >= num_dates:
@@ -328,7 +328,7 @@ def sample_entries(entry_iter, start_date, end_date, num_samples):
 
   use_samples = min(num_samples, num_dates)
 
-  logging.debug("use samples: %d" % use_samples)
+  logging.debug("use samples: %d", use_samples)
 
   line_iter = scan_convert_line(
       start_date.toordinal(), 0, end_date.toordinal(), use_samples - 1)

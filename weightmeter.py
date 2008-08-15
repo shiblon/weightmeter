@@ -14,7 +14,7 @@ from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries
 from datamodel import decaying_average_iter, full_entry_iter
 from graph import chartserver_bounded_size, chartserver_weight_url
-from wsgiutil import PathRequestHandler, ParamSanitizer
+from wsgiutil import PathRequestHandler, ParamSanitizer, escape_qp
 from urlparse import urlparse, urlunparse
 
 from google.appengine.api import users
@@ -80,21 +80,22 @@ class UpdateEntry(PathRequestHandler):
     weight_data = WeightData(user_info)
 
     sanitizer = ParamSanitizer(self.request,
-                               ('d', ParamSanitizer.Date),
-                               ('w', ParamSanitizer.Number),
+                               ('date', ParamSanitizer.Date),
+                               ('weight', ParamSanitizer.Number),
                                ('r', ParamSanitizer.URIPath, ''),
                                ('e', ParamSanitizer.URIPath, ''),
-                               ('E', ParamSanitizer.ErrorParams, ''),
-        default_on_error=True)
+                               default_on_error=True)
 
     if sanitizer.failure():
+      logging.debug("Sanitizer failed on %r", sanitizer.failed)
       self.redirect(sanitizer.failed_redirect_url(sanitizer.params['e'],
                                                   sanitizer.params['r'],
                                                   self.default_error_path))
     else:
-      date = sanitizer.params['d']
-      weight = sanitizer.params['w']
+      date = sanitizer.params['date']
+      weight = sanitizer.params['weight']
       redir_path = sanitizer.params['r']
+      logging.debug("redirect path = %s", redir_path)
 
       weight_data.update(date, weight)
       self.redirect(redir_path)
@@ -106,7 +107,7 @@ class MobileSite(PathRequestHandler):
     self.redirect(self.add_to_request_path('/index'), True)
 
   def GET_index(self, subpath):
-    logging.info(self.request.path)
+    logging.info("%s", self.request.path)
 
     # Get the settings and info for this user
     user_info = _get_current_user_info()
@@ -126,10 +127,13 @@ class MobileSite(PathRequestHandler):
     error_sanitizer = ParamSanitizer(self.request,
                                      ('E', ParamSanitizer.ErrorParams))
 
+    # TODO: if the error sanitizer succeeded, then we had an error and can
+    # display stuff by the form fields.
+
     img_width = sanitizer.params['w']
     img_height = sanitizer.params['h']
     chart_width, chart_height = chartserver_bounded_size(img_width, img_height)
-    logging.debug(chart_width, chart_height)
+    logging.debug("cw=%d, ch=%d", chart_width, chart_height)
     samples = min(MAX_GRAPH_SAMPLES, chart_width // 4)
 
     # Note that the failure of the sanitizer is not too critical in this case:
@@ -153,14 +157,14 @@ class MobileSite(PathRequestHandler):
         'url': chartserver_weight_url(chart_width, chart_height, smoothed_iter),
         }
 
-    logging.debug("Chart URL: %s" % img['url'])
+    logging.debug("Chart URL: %s", img['url'])
 
     # Get the most recent weight entry and create a selection list
     recent_entry = weight_data.most_recent_entry()
     weight_format = "%.2f"
     weight_choices = None
     if recent_entry is not None:
-      logging.debug("recent entry: %r" % (recent_entry,))
+      logging.debug("recent entry: %r", recent_entry)
       # Make a selection box that centers on this, with DEFAULT_POUND_SELECTION
       # pounds either direction to choose from
       recent_date, recent_weight = recent_entry
@@ -219,6 +223,9 @@ class MobileSite(PathRequestHandler):
     if recent_entry:
       recent_weight = weight_format % recent_entry[1]
 
+    # Create a URL back here:
+    self_redirect = sanitizer.redirect_string(self.request.path)
+
     # Output to the template
     template_values = {
         'img': img,
@@ -226,6 +233,7 @@ class MobileSite(PathRequestHandler):
         'logout_url': users.create_logout_url(self.request.uri),
         'data_url': '/data',
         'user_name': users.get_current_user().email(),
+        'update_url': '/update?r=%s' % escape_qp(self_redirect),
         'weight_choices': weight_choices,
         'recent_weight': recent_weight,
         'date_items': date_items,
@@ -236,9 +244,6 @@ class MobileSite(PathRequestHandler):
 
     path = os.path.join(os.path.dirname(__file__), 'index.html')
     self.response.out.write(template.render(path, template_values))
-
-  def GET_stuff(self, subpath):
-    self.response.out.write("Here's your stuff!")
 
 class DebugOutput(webapp.RequestHandler):
   def get(self):
@@ -282,7 +287,7 @@ class DataImport(webapp.RequestHandler):
     # use that delimiter.
     data_file = StringIO(posted_data)
     for delimiter in ', \t':
-      logging.debug("CSV import: trying delimiter '%s'" % delimiter)
+      logging.debug("CSV import: trying delimiter '%s'", delimiter)
       data_file.seek(0)
       reader = csv.reader(data_file, delimiter=delimiter)
       try:
@@ -297,17 +302,17 @@ class DataImport(webapp.RequestHandler):
         reader = csv.reader(data_file, delimiter=delimiter)
         break
       except csv.Error, e:
-        logging.warn("CSV delimiter '%s' invalid for uploaded data" % delimiter)
+        logging.warn("CSV delimiter '%s' invalid for uploaded data", delimiter)
     else:
       data_file.seek(0)
-      logging.error("Unrecognized csv format: '%s'" % data_file.readline())
+      logging.error("Unrecognized csv format: '%s'", data_file.readline())
       # TODO: show an error to the user in some meaningful way
       self.redirect('/data')
 
     entries = []
     for row in reader:
       if len(row) < 2:
-        logging.error("Invalid row in imported data '%s'" % ",".join(row))
+        logging.error("Invalid row in imported data '%s'", ",".join(row))
         continue
       else:
         datestr, weightstr = row[:2]
@@ -323,13 +328,13 @@ class DataImport(webapp.RequestHandler):
         try:
           date = datetime.datetime.strptime(datestr, format).date()
         except ValueError, e:
-          logging.error("Invalid date entry '%s'" % datestr)
+          logging.error("Invalid date entry '%s'", datestr)
           continue
 
         try:
           weight = float(weightstr)
         except ValueError, e:
-          logging.error("Invalid weight entry '%s'" % weightstr)
+          logging.error("Invalid weight entry '%s'", weightstr)
           continue
 
       entries.append((date, weight))
@@ -377,7 +382,7 @@ class Settings(webapp.RequestHandler):
       val += 0.05
 
     for opt in gamma_options:
-      logging.info(opt)
+      logging.info("Option: %s", opt)
       if opt['value'] == (float_format % user_info.gamma):
         opt['selected'] = True
 
@@ -417,13 +422,13 @@ class AddEntry(webapp.RequestHandler):
     try:
       date = datetime.datetime.strptime(datestr, "%Y-%m-%d").date()
     except ValueError, e:
-      logging.error('Invalid date specified: %r' % datestr)
+      logging.error('Invalid date specified: %r', datestr)
       error = True
 
     try:
       weight = float(self.request.get('weight'))
     except ValueError, e:
-      logging.error("Invalid weight specified: %r" % self.request.get('weight'))
+      logging.error("Invalid weight specified: %r", self.request.get('weight'))
       error = True
 
     if not error:
