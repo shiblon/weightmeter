@@ -6,10 +6,12 @@ api_version: 1
 handlers:
 - url: /stylesheets
   static_dir: stylesheets
+  login: required
 
 - url: /favicon.ico
   static_files: static/images/favicon.ico
   upload: static/images/favicon.ico
+  login: required
 
 - url: /.*
   script: weightmeter.py

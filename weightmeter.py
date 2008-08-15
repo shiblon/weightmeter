@@ -6,6 +6,7 @@ import datetime
 import logging
 import math
 import os.path
+import re
 import wsgiref.handlers
 
 from StringIO import StringIO
@@ -30,6 +31,15 @@ MOBILE_IMG_HEIGHT = 200
 
 MAX_GRAPH_SAMPLES = 100
 MAX_MOBILE_SAMPLES = MOBILE_IMG_WIDTH // 4
+
+def _path_pattern(cls):
+  if hasattr(cls, 'ROOT'):
+    root = re.escape(cls.ROOT)
+    return r'%s|%s/.*' % (root, root)
+  elif hasattr(cls, 'PATH'):
+    return re.escape(cls.PATH)
+  else:
+    raise ValueError("No ROOT or PATH in class %s" % cls.__name__)
 
 def _get_current_user_info():
   user = users.get_current_user()
@@ -69,12 +79,39 @@ def _date_range_from_params(start_param, end_param, today=None):
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
 
-class MainSite(webapp.RequestHandler):
-  def get(self):
-    template_values = {}
+class RootPathRequestHandler(webapp.RequestHandler):
+  ROOT = '/'   # root path (accepts ROOT|ROOT/.*)
 
-    path = os.path.join(os.path.dirname(__file__), 'index.html')
-    self.response.out.write(template.render(path, template_values))
+  def _dispatch_func(self, method):
+    path = self.request.path.lower()
+    logging.info("Method: " + method + ", Path: " + path)
+    if not path.startswith(self.ROOT):
+      raise ValueError("Wrong handler called for " + self.request.path)
+
+    # Strip off the root, change / to _
+    call_path = path[len(self.ROOT):].replace('/', '_')
+    logging.info("call path " + call_path)
+
+    func = getattr(self, method.lower() + call_path, None)
+    if func is not None:
+      return func()
+    else:
+      raise ValueError("No such path: " + self.request.path)
+
+  def get(self):
+    return self._dispatch_func('GET')
+
+  def post(self):
+    return self._dispatch_func('POST')
+
+class MobileSite(RootPathRequestHandler):
+  ROOT = '/m'
+
+  def get_index(self):
+    self.response.out.write("hi!")
+
+  def get_stuff(self):
+    self.response.out.write("Here's your stuff!")
 
 class DebugOutput(webapp.RequestHandler):
   def get(self):
@@ -442,6 +479,7 @@ def main():
 
   application = webapp.WSGIApplication(
       [('/', Site),
+       (_path_pattern(MobileSite), MobileSite),
        ('/index', Site),
        ('/add_entry', AddEntry),
        ('/settings', Settings),
