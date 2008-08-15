@@ -1,6 +1,5 @@
 from __future__ import division
 
-import cgi
 import csv
 import datetime
 import logging
@@ -12,9 +11,11 @@ import wsgiref.handlers
 from StringIO import StringIO
 
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
-from graph import chartserver_data_params
-from graph import sample_entries
-from graph import decaying_average_iter, full_entry_iter
+from datamodel import sample_entries
+from datamodel import decaying_average_iter, full_entry_iter
+from graph import chartserver_bounded_size, chartserver_weight_url
+from wsgiutil import PathRequestHandler, ParamSanitizer
+from urlparse import urlparse, urlunparse
 
 from google.appengine.api import users
 from google.appengine.ext import webapp, db
@@ -22,15 +23,12 @@ from google.appengine.ext.webapp import template
 
 # Set constants
 DEFAULT_SELECT_DAYS = 14
-DEFAULT_POUND_SELECTION = 5
-
-DECAY_SETUP_DAYS = 14
+DEFAULT_POUND_SELECTION = 2
 
 MOBILE_IMG_WIDTH = 300
 MOBILE_IMG_HEIGHT = 200
 
-MAX_GRAPH_SAMPLES = 100
-MAX_MOBILE_SAMPLES = MOBILE_IMG_WIDTH // 4
+MAX_GRAPH_SAMPLES = 200
 
 def _get_current_user_info():
   user = users.get_current_user()
@@ -41,7 +39,7 @@ def _date_range_from_params(start_param, end_param, today=None):
   """Return today, start_date, and end_date for the URL parameters"""
 
   if today is None:
-    today = datetime.date.today()
+    today = get_today()
 
   today = today.toordinal()
 
@@ -70,51 +68,176 @@ def _date_range_from_params(start_param, end_param, today=None):
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
 
-class RootPathRequestHandler(webapp.RequestHandler):
-  ROOT = '/'   # root path (accepts ROOT|ROOT/.*)
+class UpdateEntry(PathRequestHandler):
+  path_regex = '/update'
 
-  @classmethod
-  def Handler(cls):
-    if hasattr(cls, 'ROOT'):
-      root = re.escape(cls.ROOT)
-      pattern = r'%s|%s/.*' % (root, root)
-    elif hasattr(cls, 'PATH'):
-      pattern = re.escape(cls.PATH)
+  # TODO: fix this default error path
+  default_error_path = '/error'
+
+  def POST(self):
+    """Updates a single weight entry."""
+    user_info = _get_current_user_info()
+    weight_data = WeightData(user_info)
+
+    sanitizer = ParamSanitizer(self.request,
+                               ('d', ParamSanitizer.Date),
+                               ('w', ParamSanitizer.Number),
+                               ('r', ParamSanitizer.URIPath, ''),
+                               ('e', ParamSanitizer.URIPath, ''),
+                               ('E', ParamSanitizer.ErrorParams, ''),
+        default_on_error=True)
+
+    if sanitizer.failure():
+      self.redirect(sanitizer.failed_redirect_url(sanitizer.params['e'],
+                                                  sanitizer.params['r'],
+                                                  self.default_error_path))
     else:
-      raise ValueError("No ROOT or PATH in class %s" % cls.__name__)
+      date = sanitizer.params['d']
+      weight = sanitizer.params['w']
+      redir_path = sanitizer.params['r']
 
-    # Return a tuple for the WSGIApplication
-    return pattern, cls
+      weight_data.update(date, weight)
+      self.redirect(redir_path)
 
-  def _dispatch_func(self, method):
-    path = self.request.path.lower()
-    logging.info("Method: " + method + ", Path: " + path)
-    if not path.startswith(self.ROOT):
-      raise ValueError("Wrong handler called for " + self.request.path)
+class MobileSite(PathRequestHandler):
+  path_regex = '^/m(/.*|)'
 
-    # Strip off the root, change / to _
-    call_path = path[len(self.ROOT):].replace('/', '_')
-    logging.info("call path " + call_path)
+  def GET(self, subpath):
+    self.redirect(self.add_to_request_path('/index'), True)
 
-    func = getattr(self, method.upper() + call_path, None)
-    if func is not None:
-      return func()
-    else:
-      raise ValueError("No such path: " + self.request.path)
+  def GET_index(self, subpath):
+    logging.info(self.request.path)
 
-  def get(self):
-    return self._dispatch_func('GET')
+    # Get the settings and info for this user
+    user_info = _get_current_user_info()
+    weight_data = WeightData(user_info)
 
-  def post(self):
-    return self._dispatch_func('POST')
+    sanitizer = ParamSanitizer(
+      self.request,
+      ('s', sanitize_date_range_ordinal, -DEFAULT_SELECT_DAYS),
+      ('e', ParamSanitizer.Integer, 0),
+      ('w', ParamSanitizer.Integer, MOBILE_IMG_WIDTH),
+      ('h', ParamSanitizer.Integer, MOBILE_IMG_HEIGHT),
+      ('es', ParamSanitizer.Enumeration(('l', 't')), 'l'),
+      default_on_error=True)
 
-class MobileSite(RootPathRequestHandler):
-  ROOT = '/m'
+    # Keep the error stuff separate since we may want to treat it differently
+    # (not propagate it to links on the page, etc.).
+    error_sanitizer = ParamSanitizer(self.request,
+                                     ('E', ParamSanitizer.ErrorParams))
 
-  def GET_index(self):
-    self.response.out.write("hi!")
+    img_width = sanitizer.params['w']
+    img_height = sanitizer.params['h']
+    chart_width, chart_height = chartserver_bounded_size(img_width, img_height)
+    logging.debug(chart_width, chart_height)
+    samples = min(MAX_GRAPH_SAMPLES, chart_width // 4)
 
-  def GET_stuff(self):
+    # Note that the failure of the sanitizer is not too critical in this case:
+    # we will just silently fall back on the defaults.
+    # In fact, because defaults are specified for every entry above, and we
+    # allow defaults when sanitization fails, an error can't occur here.
+
+    # Get date and view ranges
+    today, start, end = _date_range_from_params(sanitizer.params['s'],
+                                                sanitizer.params['e'])
+
+    smoothed_iter = weight_data.smoothed_weight_iter(start,
+                                                     end,
+                                                     samples,
+                                                     gamma=user_info.gamma)
+
+    # Make a chart
+    img = {
+        'width': img_width,
+        'height': img_height,
+        'url': chartserver_weight_url(chart_width, chart_height, smoothed_iter),
+        }
+
+    logging.debug("Chart URL: %s" % img['url'])
+
+    # Get the most recent weight entry and create a selection list
+    recent_entry = weight_data.most_recent_entry()
+    weight_format = "%.2f"
+    weight_choices = None
+    if recent_entry is not None:
+      logging.debug("recent entry: %r" % (recent_entry,))
+      # Make a selection box that centers on this, with DEFAULT_POUND_SELECTION
+      # pounds either direction to choose from
+      recent_date, recent_weight = recent_entry
+      start_weight = math.floor(recent_weight - DEFAULT_POUND_SELECTION)
+      end_weight = math.ceil(recent_weight + DEFAULT_POUND_SELECTION)
+      weight = start_weight
+      weight_choices = []
+      while weight <= end_weight:
+        choice = weight_format % weight
+        weight_choices.append(choice)
+        weight += user_info.scale_resolution
+
+    # Set up the date selection list
+    day_delta = datetime.timedelta(days=1)
+    dates = [today - i * day_delta for i in xrange(-1, DEFAULT_SELECT_DAYS)]
+    date_items = [
+        {'date': d.strftime("%Y-%m-%d"),
+         'name': d.strftime("%a, %b %d"),
+         'selected': d == today} for d in dates]
+
+    start_param = sanitizer.params['s']
+    entry_style = sanitizer.params['es']
+
+    view_options = [
+        {'name': 'All', 'start': '*'},
+        {'name': '1y', 'start': '-365'},
+        {'name': '6m', 'start': '-180'},
+        {'name': '3m', 'start': '-90'},
+        {'name': '2m', 'start': '-60'},
+        {'name': '1m', 'start': '-30'},
+        {'name': '2w', 'start': '-14'},
+        {'name': '1w', 'start': '-7'},
+        ]
+
+    # Add junk to the view options (calculate URL, etc.)
+    for opt in view_options:
+      if opt['start'] == start_param:
+        opt['selected'] = True
+      opt['url'] = sanitizer.redirect_string(self.request.path,
+                                             {'s': opt['start'],
+                                              'e': '0'})
+
+    entry_styles = [
+        {'name': 'text', 'param': 't'},
+        {'name': 'list', 'param': 'l'}
+        ]
+
+    for style in entry_styles:
+      if style['param'] == entry_style:
+        style['selected'] = True
+      style['url'] = sanitizer.redirect_string(self.request.path,
+                                               {'s': start_param,
+                                                'es': style['param']})
+
+    recent_weight = None
+    if recent_entry:
+      recent_weight = weight_format % recent_entry[1]
+
+    # Output to the template
+    template_values = {
+        'img': img,
+        'settings_url': '/settings',
+        'logout_url': users.create_logout_url(self.request.uri),
+        'data_url': '/data',
+        'user_name': users.get_current_user().email(),
+        'weight_choices': weight_choices,
+        'recent_weight': recent_weight,
+        'date_items': date_items,
+        'text_entry': sanitizer.params['es'] == 't' or not recent_entry,
+        'view_options': view_options,
+        'entry_styles': entry_styles,
+        }
+
+    path = os.path.join(os.path.dirname(__file__), 'index.html')
+    self.response.out.write(template.render(path, template_values))
+
+  def GET_stuff(self, subpath):
     self.response.out.write("Here's your stuff!")
 
 class DebugOutput(webapp.RequestHandler):
@@ -130,7 +253,6 @@ class DebugOutput(webapp.RequestHandler):
           entries.append((start_date + day_delta * i, weight))
 
     # Output to the template
-    logging.info(entries)
     template_values = {
         'user_info': user_info,
         'entries': entries,
@@ -160,11 +282,11 @@ class DataImport(webapp.RequestHandler):
     # use that delimiter.
     data_file = StringIO(posted_data)
     for delimiter in ', \t':
-      logging.info("Trying delimiter '%s'" % delimiter)
+      logging.debug("CSV import: trying delimiter '%s'" % delimiter)
       data_file.seek(0)
       reader = csv.reader(data_file, delimiter=delimiter)
       try:
-        logging.info("trying a row")
+        logging.debug("CSV import: trying a row")
         row = []
         while len(row) == 0:
           row = reader.next()
@@ -240,7 +362,6 @@ class Settings(webapp.RequestHandler):
 
     user_info.put()
 
-    logging.info("Ready to redirect back to settings page")
     self.redirect('/settings?state=complete')
 
   def get(self):
@@ -286,159 +407,6 @@ class Settings(webapp.RequestHandler):
     path = os.path.join(os.path.dirname(__file__), 'settings.html')
     self.response.out.write(template.render(path, template_values))
 
-class Site(webapp.RequestHandler):
-  def _today(self):
-    # TODO: Make this grok user time zone
-    return datetime.date.today()
-
-  def _chart_params(self, smoothed_iter, width, height):
-    params = [
-        "chs=%dx%d" % (width, height),
-        "cht=lc",
-        "chm=D,ccddff,1,0,6|D,4488ff,0,0,2|d,4488ff,0,-1,6",
-        ]
-    params.extend(
-        chartserver_data_params(
-          smoothed_iter,
-          width=width,
-          height=height)
-        )
-    return params
-
-  def get(self):
-    logging.info(self.request.path)
-
-    # The alias / just redirects to the viewing page: /index
-    if self.request.path == '/':
-      self.redirect('/index')
-      return
-
-    # Get the settings and info for this user
-    user_info = _get_current_user_info()
-    weight_data = WeightData(user_info)
-
-    # Get date and view ranges
-
-    today, start_date, end_date = _date_range_from_params(
-        self.request.get('s', '%d' % (-DEFAULT_SELECT_DAYS,)),
-        self.request.get('e', '0'),
-        self._today())
-
-    # Get a set of weights *before* the start date, and smooth them out until
-    # the decayed average has had a little time to ramp up.
-    # Note that it overlaps with the real sequence, because the start value is
-    # simply assigned to the first entry for decay calculations.
-    early_d1 = start_date - datetime.timedelta(days=DECAY_SETUP_DAYS)
-    early_d2 = start_date
-    early_smoothed = list(
-        decaying_average_iter(
-          full_entry_iter(
-            weight_data.query(early_d1, early_d2))))
-    start_smooth = None
-    if early_smoothed:
-      start_smooth = early_smoothed[-1][-1]
-
-    # Get the sampled raw weights and smoothed function:
-    smoothed_iter = decaying_average_iter(
-        sample_entries(
-          weight_data.query(start_date, end_date),
-          start_date,
-          end_date,
-          MAX_MOBILE_SAMPLES),
-        gamma=user_info.gamma,
-        start=start_smooth,
-        )
-
-    # Make a chart
-    img_width = MOBILE_IMG_WIDTH
-    img_height = MOBILE_IMG_HEIGHT
-    img_params = self._chart_params(smoothed_iter, img_width, img_height)
-    img = {
-        'width': img_width,
-        'height': img_height,
-        'url': "http://chart.apis.google.com/chart?" + "&".join(img_params)
-        }
-
-    logging.debug(img['url'])
-
-    # Get the most recent weight entry and create a selection list
-    recent_entry = weight_data.most_recent_entry()
-    weight_format = "%.2f"
-    weight_choices = None
-    if recent_entry is not None:
-      logging.debug("recent entry: %r" % (recent_entry,))
-      # Make a selection box that centers on this, with DEFAULT_POUND_SELECTION
-      # pounds either direction to choose from
-      recent_date, recent_weight = recent_entry
-      start_weight = math.floor(recent_weight - DEFAULT_POUND_SELECTION)
-      end_weight = math.ceil(recent_weight + DEFAULT_POUND_SELECTION)
-      weight = start_weight
-      weight_choices = []
-      while weight <= end_weight:
-        choice = weight_format % weight
-        weight_choices.append(choice)
-        weight += user_info.scale_resolution
-
-    # Set up the date selection list
-    day_delta = datetime.timedelta(days=1)
-    dates = [today - i * day_delta for i in xrange(-1, DEFAULT_SELECT_DAYS)]
-    date_items = [
-        {'date': d.strftime("%Y-%m-%d"),
-         'name': d.strftime("%B %d, %Y"),
-         'selected': d == today} for d in dates]
-
-    start_param = self.request.get('s', str(-DEFAULT_QUERY_DAYS))
-    entry_style = self.request.get('es', 'l')
-
-    view_options = [
-        {'name': 'All', 'start': '*'},
-        {'name': '1y', 'start': '-365'},
-        {'name': '6m', 'start': '-180'},
-        {'name': '3m', 'start': '-90'},
-        {'name': '2m', 'start': '-60'},
-        {'name': '1m', 'start': '-30'},
-        {'name': '2w', 'start': '-14'},
-        {'name': '1w', 'start': '-7'},
-        ]
-
-    # Add junk to the view options (calculate URL, etc.)
-    for opt in view_options:
-      if opt['start'] == start_param:
-        opt['selected'] = True
-      opt['url'] = '/index?s=%s&es=%s' % (opt['start'], entry_style)
-
-    entry_styles = [
-        {'name': 'text', 'param': 't'},
-        {'name': 'list', 'param': 'l'}
-        ]
-
-    for style in entry_styles:
-      if style['param'] == entry_style:
-        style['selected'] = True
-      style['url'] = '/index?s=%s&es=%s' % (start_param, style['param'])
-
-    recent_weight = None
-    if recent_entry:
-      recent_weight = weight_format % recent_entry[1]
-
-    # Output to the template
-    template_values = {
-        'img': img,
-        'settings_url': '/settings',
-        'logout_url': users.create_logout_url(self.request.uri),
-        'data_url': '/data',
-        'user_name': users.get_current_user().email(),
-        'weight_choices': weight_choices,
-        'recent_weight': recent_weight,
-        'date_items': date_items,
-        'text_entry': self.request.get('es', 's') == 't' or not recent_entry,
-        'view_options': view_options,
-        'entry_styles': entry_styles,
-        }
-
-    path = os.path.join(os.path.dirname(__file__), 'index.html')
-    self.response.out.write(template.render(path, template_values))
-
 class AddEntry(webapp.RequestHandler):
   def post(self):
     user_info = _get_current_user_info()
@@ -479,12 +447,17 @@ class CsvDownload(webapp.RequestHandler):
     writer = csv.writer(self.response.out)
     writer.writerows(list(weight_data.query(start_date, end_date)))
 
-def main():
+def get_today():
+  # TODO: Make this grok user time zone
+  return datetime.date.today()
 
+def sanitize_date_range_ordinal(val):
+  return val if val == '*' else ParamSanitizer.Integer(val)
+
+def main():
   application = webapp.WSGIApplication(
-      [('/', Site),
-       MobileSite.Handler(),
-       ('/index', Site),
+      [MobileSite.wsgi_handler(),
+       UpdateEntry.wsgi_handler(),
        ('/add_entry', AddEntry),
        ('/settings', Settings),
        ('/debug', DebugOutput),

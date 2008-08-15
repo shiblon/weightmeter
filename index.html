@@ -11,19 +11,6 @@
       <a href="{{ settings_url }}">Settings</a> |
       <a href="{{ logout_url }}">Logout</a>
     </div>
-    <div id="img_div" style="width: {{ img.width }}px;">
-    <div class="graph_link_text tiny">
-      {% for view_option in view_options %}
-      {% if view_option.selected %}
-      <span class="selected_link">{{ view_option.name }}</span>
-      {% else %}
-      <a class="graph_link" href="{{ view_option.url }}">{{ view_option.name }}</a>
-      {% endif %}
-      {% if not forloop.last %} |{% endif %}
-      {% endfor %}
-    </div>
-    <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>
-    </div>
     <form method="POST" action="/add_entry">
     <select name="date" id="date_select">
       {% for date_item in date_items %}
@@ -39,9 +26,7 @@
         {% endfor %}
       </select>
       {% endif %}
-    <input type=submit value="Add">
-    </form>
-    <span class="tiny">Entry style:
+    <span class="tiny">
       {% for style in entry_styles %}
       {% if style.selected %}
       <span class="selected_link">{{ style.name }}</span>
@@ -51,6 +36,21 @@
       {% if not forloop.last %} |{% endif %}
       {% endfor %}
     </span>
+    <input type=submit value="Add">
+    </form>
+    <div id="img_div" style="width: {{ img.width }}px;">
+    <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>
+    <div class="graph_link_text tiny">
+      {% for view_option in view_options %}
+      {% if view_option.selected %}
+      <span class="selected_link">{{ view_option.name }}</span>
+      {% else %}
+      <a class="graph_link" href="{{ view_option.url }}">{{ view_option.name }}</a>
+      {% endif %}
+      {% if not forloop.last %} |{% endif %}
+      {% endfor %}
+    </div>
+    </div>
     <div class="tiny"><a href="http://weightmeter.googlecode.com/">Source Project</a></div>
   </body>
 </html>
