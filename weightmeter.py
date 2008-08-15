@@ -32,15 +32,6 @@ MOBILE_IMG_HEIGHT = 200
 MAX_GRAPH_SAMPLES = 100
 MAX_MOBILE_SAMPLES = MOBILE_IMG_WIDTH // 4
 
-def _path_pattern(cls):
-  if hasattr(cls, 'ROOT'):
-    root = re.escape(cls.ROOT)
-    return r'%s|%s/.*' % (root, root)
-  elif hasattr(cls, 'PATH'):
-    return re.escape(cls.PATH)
-  else:
-    raise ValueError("No ROOT or PATH in class %s" % cls.__name__)
-
 def _get_current_user_info():
   user = users.get_current_user()
   assert user is not None
@@ -82,6 +73,19 @@ def _date_range_from_params(start_param, end_param, today=None):
 class RootPathRequestHandler(webapp.RequestHandler):
   ROOT = '/'   # root path (accepts ROOT|ROOT/.*)
 
+  @classmethod
+  def Handler(cls):
+    if hasattr(cls, 'ROOT'):
+      root = re.escape(cls.ROOT)
+      pattern = r'%s|%s/.*' % (root, root)
+    elif hasattr(cls, 'PATH'):
+      pattern = re.escape(cls.PATH)
+    else:
+      raise ValueError("No ROOT or PATH in class %s" % cls.__name__)
+
+    # Return a tuple for the WSGIApplication
+    return pattern, cls
+
   def _dispatch_func(self, method):
     path = self.request.path.lower()
     logging.info("Method: " + method + ", Path: " + path)
@@ -92,7 +96,7 @@ class RootPathRequestHandler(webapp.RequestHandler):
     call_path = path[len(self.ROOT):].replace('/', '_')
     logging.info("call path " + call_path)
 
-    func = getattr(self, method.lower() + call_path, None)
+    func = getattr(self, method.upper() + call_path, None)
     if func is not None:
       return func()
     else:
@@ -107,10 +111,10 @@ class RootPathRequestHandler(webapp.RequestHandler):
 class MobileSite(RootPathRequestHandler):
   ROOT = '/m'
 
-  def get_index(self):
+  def GET_index(self):
     self.response.out.write("hi!")
 
-  def get_stuff(self):
+  def GET_stuff(self):
     self.response.out.write("Here's your stuff!")
 
 class DebugOutput(webapp.RequestHandler):
@@ -479,7 +483,7 @@ def main():
 
   application = webapp.WSGIApplication(
       [('/', Site),
-       (_path_pattern(MobileSite), MobileSite),
+       MobileSite.Handler(),
        ('/index', Site),
        ('/add_entry', AddEntry),
        ('/settings', Settings),
