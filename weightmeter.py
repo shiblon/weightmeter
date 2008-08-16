@@ -33,6 +33,13 @@ MOBILE_IMG_HEIGHT = 200
 
 MAX_GRAPH_SAMPLES = 200
 
+def first_nonempty(*args):
+  for a in args:
+    if a:
+      return a
+  else:
+    return None
+
 def _get_current_user_info():
   user = users.get_current_user()
   assert user is not None
@@ -96,23 +103,25 @@ class UpdateEntry(PathRequestHandler):
 
     if form.failure():
       logging.debug("Sanitizer failed on %r", form.failed)
-      self.redirect(form.failed_redirect_url(form.params['e'],
-                                             form.params['r'],
-                                             self.default_error_path,
-                                             DEFAULT_ERROR_PATH))
+      failure_url = first_nonempty(form.params['e'],
+                                   form.params['r'],
+                                   self.default_error_path,
+                                   DEFAULT_ERROR_PATH)
+      self.safe_redirect(form.failed_redirect_url(failure_url))
     else:
       date = form.params['date']
       weight = form.params['weight']
       weight_data.update(date, weight)
-      self.safe_redirect(form.params['r'],
-                         self.default_redir_path,
-                         DEFAULT_REDIR_PATH)
+      redir_url = first_nonempty(form.params['r'],
+                                 self.default_redir_path,
+                                 DEFAULT_REDIR_PATH)
+      self.safe_redirect(redir_url)
 
 class MobileSite(PathRequestHandler):
   path_regex = '^/m(/.*|)'
 
   def GET(self, subpath):
-    self.redirect(self.add_to_request_path('/index'), True)
+    self.safe_redirect(self.add_to_request_path('/index'), True)
 
   def GET_index(self, subpath):
     logging.info("%s", self.request.path)
@@ -389,18 +398,20 @@ class Settings(PathRequestHandler):
 
     if form.failure():
       logging.debug("Sanitizer failed on %r", form.failed)
-      self.redirect(form.failed_redirect_url(form.params['e'],
-                                             form.params['r'],
-                                             self.default_error_path,
-                                             DEFAULT_ERROR_PATH))
+      failed_url = first_nonempty(form.params['e'],
+                                  form.params['r'],
+                                  self.default_error_path,
+                                  DEFAULT_ERROR_PATH)
+      self.safe_redirect(form.failed_redirect_url(failed_url))
     else:
       user_info.scale_resolution = form.params['resolution']
       user_info.gamma = form.params['gamma']
       user_info.put()
-      self.safe_redirect(form.params['r'],
-                         self.default_redir_path,
-                         DEFAULT_REDIR_PATH,
-                         overrides={'state': 'success'})
+      redir_url = first_nonempty(form.params['r'],
+                                 self.default_redir_path,
+                                 DEFAULT_REDIR_PATH,
+                                 overrides={'state': 'success'})
+      self.safe_redirect(redir_url)
 
   def GET(self):
     user_info = _get_current_user_info()
@@ -471,6 +482,7 @@ def sanitize_date_range_ordinal(val):
   return val if val == '*' else ParamSanitizer.Integer(val)
 
 def main():
+  template.register_template_library('templatestuff')
   application = webapp.WSGIApplication(
       [MobileSite.wsgi_handler(),
        UpdateEntry.wsgi_handler(),

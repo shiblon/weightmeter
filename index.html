@@ -1,17 +1,7 @@
-<html>
-  <head>
-    <title>Weight Meter</title>
-    <link rel="stylesheet" href="/stylesheets/main.css">
-  </head>
-  <body>
-    <div id="header_div" class="tiny">
-      {{ user_name }} |
-      Home |
-      <a href="{{ data_url }}">Data</a> |
-      <a href="{{ settings_url }}">Settings</a> |
-      <a href="{{ logout_url }}">Logout</a>
-    </div>
-    <form method="POST" action="{{ update_url }}">
+{% extends "base_template.html" %}
+
+{% block content %}
+  <form method="POST" action="{{ update_url }}">
       {% if has_error %}
       <div class="form_error">There were errors in your entry.  It was not recorded.</div>
       {% endif %}
@@ -54,6 +44,4 @@
       {% endfor %}
     </div>
     </div>
-    <div class="tiny"><a href="http://weightmeter.googlecode.com/">Source Project</a></div>
-  </body>
-</html>
+{% endblock %}

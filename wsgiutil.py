@@ -189,11 +189,11 @@ class ParamSanitizer(object):
     """
     return urlunparse(('', '', path, '', self.param_string(overrides), ''))
 
-  def failed_redirect_url(self, *urls_to_try, **kargs):
-    """Create a redirect URL from the first non-empty path in the list.
+  def failed_redirect_url(self, url, **kargs):
+    """Create a redirect URL from the path.
 
-    Creates a URL path?query part from the first nonempty entry in
-    urls_to_try.  It will look like this when finished:
+    Creates a URL path?query part from the url.  It will look like this when
+    finished:
 
       /original_path?original_query&error_query
 
@@ -204,23 +204,20 @@ class ParamSanitizer(object):
     include a default fallback as a parameter.
 
     params:
-      *urls_to_try: just what it says
+      url: just what it says
       error_name: name of the error parameter: defaults to 'E'
 
     returns:
       A redirect URL, or None if no non-empty path was found
 
     """
+    assert url, "Cannot redirect to empty URL"
     error_name = kargs.get('error_name', 'E')
-    for url in urls_to_try:
-      if not url: continue
-      path, query = urlsplit(url)[2:4]
-      if query and not query.endswith('&'):
-        query += '&'
-      query += error_name + '=' + self.failed_param_string()
-      return urlunparse(('', '', path, '', query, ''))
-    else:
-      return None  # can't do anything else: nothing worked
+    path, query = urlsplit(url)[2:4]
+    if query and not query.endswith('&'):
+      query += '&'
+    query += error_name + '=' + self.failed_param_string()
+    return urlunparse(('', '', path, '', query, ''))
 
   def failed_param_string(self):
     """Returns a parameter string that can be used to give helpful errors.
@@ -353,20 +350,16 @@ class PathRequestHandler(RequestHandler):
 
     return cls.path_regex, cls
 
-  def safe_redirect(self, *uris, **kargs):
+  def safe_redirect(self, uri, **kargs):
     """Redirect, but throws an exception if the uri has a scheme or domain
     
     params:
-      *uris - relative path and query parameters - a list - the first non-empty
-          one will be used.
+      uri - relative path and query parameters
       overrides (keyword only): a dictionary of parameter overrides - a value
           of None indicates that the parameter should be removed.
     """
-    # Find the first uri that is non-empty
-    for uri in uris:
-      if uri: break
-    else:
-      raise InvalidRequestURI("No non-empty URI specified");
+    if not uri:
+      raise InvalidRequestURI("Empty URI specified");
 
     scheme, domain, path, query, fragments = urlsplit(uri)
     if scheme or domain:
