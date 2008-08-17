@@ -18,8 +18,9 @@ class InvalidParameter(ValueError):
   def __init__(self, value, *args, **kargs):
     super(InvalidParameter, self).__init__(*args)
     self.value = value
-    self.display = kargs.get('display', '')
-    logging.error("InvalidParameter: %s, %s", self.message, self.display)
+    display = kargs.get('display', '')
+    self.display = display or self.message
+    logging.error("InvalidParameter: %s, %s", self.message, display)
 
   def __repr__(self):
     s = super(InvalidParameter, self).__repr__()
@@ -350,7 +351,7 @@ class PathRequestHandler(RequestHandler):
 
     return cls.path_regex, cls
 
-  def safe_redirect(self, uri, **kargs):
+  def safe_redirect(self, uri, permanent=False, **kargs):
     """Redirect, but throws an exception if the uri has a scheme or domain
     
     params:
@@ -389,7 +390,7 @@ class PathRequestHandler(RequestHandler):
     uri = urlunparse(('', '', path, '', query, ''))
 
     logging.debug("safe redirect to %s", uri)
-    return self.redirect(uri)
+    return self.redirect(uri, permanent=permanent)
 
   def add_to_request_path(self, suffix):
     """Adds a suffix to the request path, preserving query parameters"""

@@ -13,13 +13,14 @@ from StringIO import StringIO
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries
 from datamodel import decaying_average_iter, full_entry_iter
+from dateutil import DateDelta, dates_from_path
 from graph import chartserver_bounded_size, chartserver_weight_url
 from wsgiutil import PathRequestHandler, ParamSanitizer, escape_qp
 from urlparse import urlparse, urlunparse
 
 from google.appengine.api import users
 from google.appengine.ext import webapp, db
-from google.appengine.ext.webapp import template
+from google.appengine.ext.webapp import template, RequestHandler
 
 # Set constants
 DEFAULT_SELECT_DAYS = 14
@@ -77,6 +78,21 @@ def _date_range_from_params(start_param, end_param, today=None):
     end_day = today.toordinal()
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
+
+class ShowGraph(webapp.RequestHandler):
+  def get(self, mpath, spath, epath):
+    """Get the graph page.
+
+    Params:
+      mpath - will be /m if this should be a mobile page (for handhelds)
+      spath - start date path component
+      epath - end date path component
+    """
+    sdate, edate = dates_from_path(spath, epath)
+    self.response.out.write("%r, %r" % (sdate, edate))
+
+    # True if we need to emit a mobile site.
+    is_mobile = not not mpath
 
 class Error(PathRequestHandler):
   path_regex = '/error'
@@ -484,13 +500,15 @@ def sanitize_date_range_ordinal(val):
 def main():
   template.register_template_library('templatestuff')
   application = webapp.WSGIApplication(
-      [MobileSite.wsgi_handler(),
-       UpdateEntry.wsgi_handler(),
-       Settings.wsgi_handler(),
-       DebugOutput.wsgi_handler(),
-       DataImport.wsgi_handler(),
-       CsvDownload.wsgi_handler(),
-       Error.wsgi_handler(),
+      [
+        ('/graph(/m)?(/[^/]+)?(/[^/]+)?', ShowGraph),
+        MobileSite.wsgi_handler(),
+        UpdateEntry.wsgi_handler(),
+        Settings.wsgi_handler(),
+        DebugOutput.wsgi_handler(),
+        DataImport.wsgi_handler(),
+        CsvDownload.wsgi_handler(),
+        Error.wsgi_handler(),
       ],
       debug=True)
   wsgiref.handlers.CGIHandler().run(application)
