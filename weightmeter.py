@@ -10,17 +10,29 @@ import wsgiref.handlers
 
 from StringIO import StringIO
 
+from google.appengine.api import users
+from google.appengine.ext import webapp, db
+from google.appengine.ext.webapp import template
+
+# This has to come after the appengine includes, otherwise the appropriate
+# environment is not yet set up for Django and it barfs.
+try:
+  from django import newforms as forms
+except ImportError:
+  from django import forms
+
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries
 from datamodel import decaying_average_iter, full_entry_iter
 from dateutil import DateDelta, dates_from_path
 from graph import chartserver_bounded_size, chartserver_weight_url
-from wsgiutil import PathRequestHandler, ParamSanitizer, escape_qp
 from urlparse import urlparse, urlunparse
+from util.forms import FloatChoiceField
+from util.handlers import RequestHandler
+from wsgiutil import ParamSanitizer, escape_qp
 
-from google.appengine.api import users
-from google.appengine.ext import webapp, db
-from google.appengine.ext.webapp import template, RequestHandler
+def template_path(name):
+  return os.path.join(os.path.dirname(__file__), 'templates', name)
 
 # Set constants
 DEFAULT_SELECT_DAYS = 14
@@ -79,7 +91,7 @@ def _date_range_from_params(start_param, end_param, today=None):
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
 
-class ShowGraph(webapp.RequestHandler):
+class ShowGraph(RequestHandler):
   def get(self, mpath, spath, epath):
     """Get the graph page.
 
@@ -94,13 +106,13 @@ class ShowGraph(webapp.RequestHandler):
     # True if we need to emit a mobile site.
     is_mobile = not not mpath
 
-class Error(PathRequestHandler):
+class Error(RequestHandler):
   path_regex = '/error'
 
   def GET(self):
     self.out.write("An error occurred while trying to go to an error page.")
 
-class UpdateEntry(PathRequestHandler):
+class UpdateEntry(RequestHandler):
   path_regex = '/update'
   default_error_path = '/update'
   default_redir_path = '/update'
@@ -133,7 +145,7 @@ class UpdateEntry(PathRequestHandler):
                                  DEFAULT_REDIR_PATH)
       self.safe_redirect(redir_url)
 
-class MobileSite(PathRequestHandler):
+class MobileSite(RequestHandler):
   path_regex = '^/m(/.*|)'
 
   def GET(self, subpath):
@@ -276,10 +288,10 @@ class MobileSite(PathRequestHandler):
         'entry_styles': entry_styles,
         }
 
-    path = os.path.join(os.path.dirname(__file__), 'index.html')
+    path = template_path('index.html')
     self.response.out.write(template.render(path, template_values))
 
-class DebugOutput(PathRequestHandler):
+class DebugOutput(RequestHandler):
   path_regex = '/debug'
   def GET(self):
     user_info = _get_current_user_info()
@@ -298,10 +310,10 @@ class DebugOutput(PathRequestHandler):
         'entries': entries,
         }
 
-    path = os.path.join(os.path.dirname(__file__), 'debug_index.html')
+    path = template_path('debug_index.html')
     self.response.out.write(template.render(path, template_values))
 
-class DataImport(PathRequestHandler):
+class DataImport(RequestHandler):
   path_regex = '/data'
 
   def POST(self):
@@ -394,85 +406,57 @@ class DataImport(PathRequestHandler):
         'csv_link': '/csv?s=*',
         }
 
-    path = os.path.join(os.path.dirname(__file__), 'data.html')
+    path = template_path('data.html')
     self.response.out.write(template.render(path, template_values))
 
-class Settings(PathRequestHandler):
-  path_regex = '/settings'
-  default_error_path = '/settings'
-  default_redir_path = '/settings'
+class SettingsForm(forms.Form):
+  scale_resolution = FloatChoiceField(initial=.5,
+                                      floatfmt='%0.02f',
+                                      float_choices=[.1, .2, .25, .5, 1.],
+                                      help_text="Accuracy of scale",
+                                     )
+  gamma = FloatChoiceField(initial=.9,
+                           floatfmt='%0.02f',
+                           float_choices=(.7, .75, .8, .85, .9, .95, 1.),
+                           label="Decay weight",
+                           help_text="Smoothing constant (for graphs)",
+                          )
 
-  def POST(self):
-    user_info = _get_current_user_info()
-
-    form = ParamSanitizer(self.request,
-                          ('resolution', ParamSanitizer.Float),
-                          ('gamma', ParamSanitizer.Float),
-                          ('r', ParamSanitizer.URIPath, ''),
-                          ('e', ParamSanitizer.URIPath, ''),
-                          default_on_error=True)
-
-    if form.failure():
-      logging.debug("Sanitizer failed on %r", form.failed)
-      failed_url = first_nonempty(form.params['e'],
-                                  form.params['r'],
-                                  self.default_error_path,
-                                  DEFAULT_ERROR_PATH)
-      self.safe_redirect(form.failed_redirect_url(failed_url))
-    else:
-      user_info.scale_resolution = form.params['resolution']
-      user_info.gamma = form.params['gamma']
-      user_info.put()
-      redir_url = first_nonempty(form.params['r'],
-                                 self.default_redir_path,
-                                 DEFAULT_REDIR_PATH,
-                                 overrides={'state': 'success'})
-      self.safe_redirect(redir_url)
-
-  def GET(self):
-    user_info = _get_current_user_info()
-
-    float_format = "%0.2f"
-
-    # Decay weight options
-    gamma_options = []
-    val = 0.5
-    while val < 1.0:
-      gamma_options.append({'value': float_format % val})
-      val += 0.05
-
-    for opt in gamma_options:
-      logging.info("Option: %s", opt)
-      if opt['value'] == (float_format % user_info.gamma):
-        opt['selected'] = True
-
-    # Scale resolution options
-    resolution_options = [
-        0.1,
-        0.2,
-        0.25,
-        0.5,
-        1.0,
-        ]
-
-    for i, value in enumerate(resolution_options):
-      opt = resolution_options[i] = {'value': float_format % value}
-      if opt['value'] == (float_format % user_info.scale_resolution):
-        opt['selected'] = True
-
+class Settings(webapp.RequestHandler):
+  def _render(self, user_info, form):
     template_values = {
-        'user_name': users.get_current_user().email(),
-        'index_url': '/index',
-        'data_url': '/data',
-        'gamma_options': gamma_options,
-        'resolution_options': resolution_options,
-        'state': self.request.get('state', None),
-        }
+      'user': users.get_current_user(),
+      'index_url': '/index',
+      'data_url': '/data',
+      'form': form,
+      'state': self.request.get('state', None),
+    }
 
-    path = os.path.join(os.path.dirname(__file__), 'settings.html')
+    path = template_path('settings.html')
     self.response.out.write(template.render(path, template_values))
 
-class CsvDownload(PathRequestHandler):
+  def post(self, mpath):
+    user_info = _get_current_user_info()
+    form = SettingsForm(self.request.POST)
+    if form.is_valid():
+      user_info.scale_resolution = form.clean_data['scale_resolution']
+      user_info.gamma = form.clean_data['gamma']
+      user_info.put()
+      return self.redirect(self.request.path)
+    else:
+      return self._render(user_info, form)
+
+  def get(self, mpath):
+    user_info = _get_current_user_info()
+    form = SettingsForm({'scale_resolution': user_info.scale_resolution,
+                         'gamma': user_info.gamma})
+    if not form.is_valid():
+      form = SettingsForm()
+
+    logging.debug("settings cleaned: %r", form.clean_data)
+    return self._render(user_info, form)
+
+class CsvDownload(RequestHandler):
   path_regex = '/csv'
 
   def GET(self):
@@ -502,9 +486,9 @@ def main():
   application = webapp.WSGIApplication(
       [
         ('/graph(/m)?(/[^/]+)?(/[^/]+)?', ShowGraph),
+        ('/settings(/m)?', Settings),
         MobileSite.wsgi_handler(),
         UpdateEntry.wsgi_handler(),
-        Settings.wsgi_handler(),
         DebugOutput.wsgi_handler(),
         DataImport.wsgi_handler(),
         CsvDownload.wsgi_handler(),
