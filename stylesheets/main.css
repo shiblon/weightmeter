@@ -7,18 +7,8 @@ body {
   margin-right: 1em;
 }
 
-#header_div {
-  padding-top: 0.5em;
-  padding-bottom: 0.5em;
-}
-
-#img_div {
-  border-color: #ddd;
-  border-width: 1px;
-  border-style: solid;
-  padding: 2px;
-  margin-top: .5em;
-  margin-bottom: .5em;
+label {
+  font-size: 0.75em;
 }
 
 .graph_link_text {
@@ -29,6 +19,18 @@ body {
 
 .selected_link {
   font-weight: bold;
+}
+
+form {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
 }
 
 .graph_link {
@@ -50,4 +52,18 @@ body {
 
 .form_error {
   color: #f55;
+}
+
+.form_table {
+  text-align: left;
+}
+
+.simple_border {
+  background-color: #cdc;
+  padding: 5px;
+  border: solid 1px black;
+}
+
+.chart_image {
+  margin-top: .25em;
 }

@@ -4,13 +4,13 @@
     <link rel="stylesheet" href="/stylesheets/main.css">
   </head>
   <body>
-    <div id="header_div" class="tiny">
-      {{ user_name }} |
-      <a href="{{ home_url }}">Home</a> |
-      <a href="{{ data_url }}">Data</a> |
-      <a href="{{ settings_url }}">Settings</a> |
-      <a href="{{ logout_url }}">Logout</a>
-    </div>
+    <p class="tiny">
+      {{ user.email }} |
+      <a href="{% url ShowGraph %}">Home</a> |
+      <a href="{% url DataImport %}">Data</a> |
+      <a href="{% url Settings %}">Settings</a> |
+      <a href="{% url Logout %}">Logout</a>
+    </p>
     {% block content %}{% endblock %}
     <div class="tiny"><a href="http://weightmeter.googlecode.com/">Source Project</a></div>
   </body>

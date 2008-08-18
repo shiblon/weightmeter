@@ -27,7 +27,7 @@ from datamodel import decaying_average_iter, full_entry_iter
 from dateutil import DateDelta, dates_from_path
 from graph import chartserver_bounded_size, chartserver_weight_url
 from urlparse import urlparse, urlunparse
-from util.forms import FloatChoiceField
+from util.forms import FloatChoiceField, FloatField, DateSelect
 from util.handlers import RequestHandler
 from wsgiutil import ParamSanitizer, escape_qp
 
@@ -36,6 +36,7 @@ def template_path(name):
 
 # Set constants
 DEFAULT_SELECT_DAYS = 14
+DEFAULT_GRAPH_DURATION = '2w'
 DEFAULT_POUND_SELECTION = 2
 
 DEFAULT_ERROR_PATH = '/error'
@@ -91,20 +92,75 @@ def _date_range_from_params(start_param, end_param, today=None):
 
   return [datetime.date.fromordinal(x) for x in (today, start_day, end_day)]
 
+class WeightEntryForm(forms.Form):
+  date = forms.ChoiceField(widget=DateSelect)
+  weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
+
 class ShowGraph(RequestHandler):
-  def get(self, mpath, spath, epath):
+  def get(self, mpath, spath='', epath=''):
     """Get the graph page.
 
     Params:
       mpath - will be /m if this should be a mobile page (for handhelds)
-      spath - start date path component
-      epath - end date path component
+      spath - start date path component (optional)
+      epath - end date path component (optional)
     """
-    sdate, edate = dates_from_path(spath, epath)
-    self.response.out.write("%r, %r" % (sdate, edate))
+    # TODO: Time zone
+    today = datetime.date.today()
+    # TODO: make a user_info setting for the default duration
+    if spath.strip('/').lower() == 'all':
+      sdate = datetime.date(1990, 1, 1)  # basically everything
+      edate = today
+    else:
+      sdate, edate = dates_from_path(spath, epath, today,
+                                     default_start=DEFAULT_GRAPH_DURATION)
+    is_mobile = bool(mpath)
 
-    # True if we need to emit a mobile site.
-    is_mobile = not not mpath
+    # Get the settings and info for this user
+    user_info = _get_current_user_info()
+    weight_data = WeightData(user_info)
+
+    # TODO: rethink this whole param sanitizer thing
+    sanitizer = ParamSanitizer(
+      self.request,
+      ('w', ParamSanitizer.Integer, MOBILE_IMG_WIDTH),
+      ('h', ParamSanitizer.Integer, MOBILE_IMG_HEIGHT),
+      ('es', ParamSanitizer.Enumeration(('l', 't')), 'l'),
+      default_on_error=True)
+
+    img_width = sanitizer.params['w']
+    img_height = sanitizer.params['h']
+    chart_width, chart_height = chartserver_bounded_size(img_width, img_height)
+    samples = min(MAX_GRAPH_SAMPLES, chart_width // 4)
+
+    smoothed_iter = weight_data.smoothed_weight_iter(sdate,
+                                                     edate,
+                                                     samples,
+                                                     gamma=user_info.gamma)
+    # Make a chart
+    img = {
+        'width': img_width,
+        'height': img_height,
+        'url': chartserver_weight_url(chart_width, chart_height, smoothed_iter),
+        }
+    logging.debug("Graph Chart URL: %s", img['url'])
+
+    recent_entry = weight_data.most_recent_entry()
+    recent_weight = None
+    if recent_entry:
+      recent_weight = recent_entry[1]
+    form = WeightEntryForm(initial={'weight': recent_weight, 'date': today})
+
+    # Output to the template
+    template_values = {
+        'img': img,
+        'user': users.get_current_user(),
+        'form': form,
+        'durations': ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w'),
+        }
+
+    path = template_path('index.html')
+    self.response.out.write(template.render(path, template_values))
 
 class Error(RequestHandler):
   path_regex = '/error'
@@ -291,32 +347,8 @@ class MobileSite(RequestHandler):
     path = template_path('index.html')
     self.response.out.write(template.render(path, template_values))
 
-class DebugOutput(RequestHandler):
-  path_regex = '/debug'
-  def GET(self):
-    user_info = _get_current_user_info()
-    query = WeightBlock.all()
-    entries = []
-    day_delta = datetime.timedelta(days=1)
-    for block in query:
-      start_date = datetime.date.fromordinal(block.day_zero)
-      for i, weight in enumerate(block.weight_entries):
-        if weight >= 0.0:
-          entries.append((start_date + day_delta * i, weight))
-
-    # Output to the template
-    template_values = {
-        'user_info': user_info,
-        'entries': entries,
-        }
-
-    path = template_path('debug_index.html')
-    self.response.out.write(template.render(path, template_values))
-
 class DataImport(RequestHandler):
-  path_regex = '/data'
-
-  def POST(self):
+  def POST(self, *args):
     # TODO: use param sanitizer
     # TODO: Create a CSV data sanitizer
     # TODO: verify that the file format is correct
@@ -397,12 +429,10 @@ class DataImport(RequestHandler):
 
     self.redirect(self.request.get('redir_url', '/index'))
 
-  def GET(self):
+  def get(self, mpath):
     template_values = {
-        'user_name': users.get_current_user().email(),
+        'user': users.get_current_user(),
         'logout_url': users.create_logout_url(self.request.uri),
-        'settings_url': '/settings',
-        'index_url': '/index',
         'csv_link': '/csv?s=*',
         }
 
@@ -410,26 +440,26 @@ class DataImport(RequestHandler):
     self.response.out.write(template.render(path, template_values))
 
 class SettingsForm(forms.Form):
-  scale_resolution = FloatChoiceField(initial=.5,
-                                      floatfmt='%0.02f',
-                                      float_choices=[.1, .2, .25, .5, 1.],
-                                      help_text="Accuracy of scale",
-                                     )
-  gamma = FloatChoiceField(initial=.9,
-                           floatfmt='%0.02f',
-                           float_choices=(.7, .75, .8, .85, .9, .95, 1.),
-                           label="Decay weight",
-                           help_text="Smoothing constant (for graphs)",
-                          )
+  scale_resolution = FloatChoiceField(
+    initial=.5,
+    floatfmt='%0.02f',
+    float_choices=[.1, .2, .25, .5, 1.],
+  )
+  gamma = FloatChoiceField(
+    initial=.9,
+    floatfmt='%0.02f',
+    float_choices=(.7, .75, .8, .85, .9, .95, 1.),
+    label="Decay weight",
+  )
 
 class Settings(webapp.RequestHandler):
-  def _render(self, user_info, form):
+  def _render(self, mpath, user_info, form):
     template_values = {
       'user': users.get_current_user(),
       'index_url': '/index',
       'data_url': '/data',
       'form': form,
-      'state': self.request.get('state', None),
+      'is_mobile': bool(mpath),
     }
 
     path = template_path('settings.html')
@@ -438,23 +468,23 @@ class Settings(webapp.RequestHandler):
   def post(self, mpath):
     user_info = _get_current_user_info()
     form = SettingsForm(self.request.POST)
-    if form.is_valid():
+    if not form.is_valid():
+      # Errors?  Just render the form: the POST didn't do anything, so a
+      # refresh would be expected to "retry"
+      return self._render(mpath, user_info, form)
+    else:
+      # No errors, store the data
       user_info.scale_resolution = form.clean_data['scale_resolution']
       user_info.gamma = form.clean_data['gamma']
       user_info.put()
-      return self.redirect(self.request.path)
-    else:
-      return self._render(user_info, form)
+
+      # Send the user to the default front page after settings are altered.
+      return self.redirect(ShowGraph.get_url(mpath))
 
   def get(self, mpath):
     user_info = _get_current_user_info()
-    form = SettingsForm({'scale_resolution': user_info.scale_resolution,
-                         'gamma': user_info.gamma})
-    if not form.is_valid():
-      form = SettingsForm()
-
-    logging.debug("settings cleaned: %r", form.clean_data)
-    return self._render(user_info, form)
+    form = SettingsForm(initial=user_info.__dict__)
+    return self._render(mpath, user_info, form)
 
 class CsvDownload(RequestHandler):
   path_regex = '/csv'
@@ -481,16 +511,29 @@ def get_today():
 def sanitize_date_range_ordinal(val):
   return val if val == '*' else ParamSanitizer.Integer(val)
 
+class Logout(RequestHandler):
+  def get(self, mpath):
+    self.redirect(users.create_logout_url(mpath))
+
+class DefaultRoot(RequestHandler):
+  def get(self, mpath):
+    self.redirect(ShowGraph.get_url(mpath))
+
 def main():
   template.register_template_library('templatestuff')
+  # In order to allow for a bare "graph" url, we specify it twice.  Simpler
+  # that way.  Django gets less confused when path elements are truly optional.
   application = webapp.WSGIApplication(
       [
-        ('/graph(/m)?(/[^/]+)?(/[^/]+)?', ShowGraph),
-        ('/settings(/m)?', Settings),
+        ('(/m|)/?', DefaultRoot),
+        ('(/m|)/graph', ShowGraph),
+        ('(/m|)/graph/([^/]+)', ShowGraph),
+        ('(/m|)/graph/([^/]+)/([^/]+)', ShowGraph),
+        ('(/m|)/settings', Settings),
+        ('(/m|)/logout', Logout),
+        ('(/m|)/data', DataImport),
         MobileSite.wsgi_handler(),
         UpdateEntry.wsgi_handler(),
-        DebugOutput.wsgi_handler(),
-        DataImport.wsgi_handler(),
         CsvDownload.wsgi_handler(),
         Error.wsgi_handler(),
       ],

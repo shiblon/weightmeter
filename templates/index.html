@@ -1,47 +1,22 @@
 {% extends "base_template.html" %}
 
 {% block content %}
+<div style="width: auto">
   <form method="POST" action="{{ update_url }}">
-      {% if has_error %}
-      <div class="form_error">There were errors in your entry.  It was not recorded.</div>
-      {% endif %}
-    <select name="date" id="date_select">
-      {% for date_item in date_items %}
-      <option value="{{ date_item.date }}"{% if date_item.selected %} selected{% endif %}>{{ date_item.name }}</option>
-      {% endfor %}
-    </select>
-      {% if text_entry %}
-      <input type=text name="weight" id="weight_text" size=6 value="{{ recent_weight }}">
-      {% else %}
-      <select name="weight" id="weight_select">
-        {% for weight in weight_choices %}
-        <option value="{{ weight }}"{% ifequal weight recent_weight %} selected{% endifequal %}>{{ weight }}</option>
-        {% endfor %}
-      </select>
-      {% endif %}
-    <span class="tiny">
-      {% for style in entry_styles %}
-      {% if style.selected %}
-      <span class="selected_link">{{ style.name }}</span>
-      {% else %}
-      <a href="{{ style.url }}">{{ style.name }}</a>
-      {% endif %}
-      {% if not forloop.last %} |{% endif %}
-      {% endfor %}
-    </span>
-    <input type=submit value="Update">
-    </form>
-    <div id="img_div" style="width: {{ img.width }}px;">
-    <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>
-    <div class="graph_link_text tiny">
-      {% for view_option in view_options %}
-      {% if view_option.selected %}
-      <span class="selected_link">{{ view_option.name }}</span>
-      {% else %}
-      <a class="graph_link" href="{{ view_option.url }}">{{ view_option.name }}</a>
-      {% endif %}
-      {% if not forloop.last %} |{% endif %}
-      {% endfor %}
-    </div>
-    </div>
+  <div class="simple_border">
+    <fieldset>{% for field in form %}{{ field.label_tag }}: {{ field }} {% endfor %}<input type=submit value="Update"></fieldset>
+  </div>
+  </form>
+  <div class="simple_border chart_image">
+  <div style="width: {{ img.width }}px;">
+  <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>
+  <div class="graph_link_text tiny">
+  {% for duration in durations %}
+  <a class="graph_link" href="{% url ShowGraph duration %}">{{ duration }}</a>
+  {% if not forloop.last %} |{% endif %}
+  {% endfor %}
+  </div>
+  </div>
+  </div>
+</div>
 {% endblock %}

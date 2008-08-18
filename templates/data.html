@@ -1,16 +1,8 @@
-<html>
-  <head>
-    <title>Weight Meter Data Manager</title>
-    <link rel="stylesheet" href="/stylesheets/main.css">
-  </head>
-  <body>
-    <div id="header_div" class="tiny">
-      {{ user_name }} |
-      <a href="{{ index_url }}">Home</a> |
-      Data |
-      <a href="{{ settings_url }}">Settings</a> |
-      <a href="{{ logout_url }}">Logout</a>
-    </div>
+{% extends "base_template.html" %}
+
+{% block title %}Weight Meter Data{% endblock title %}
+
+{% block content %}
     <p><a href="{{ csv_link }}">Get data as csv</a></p>
     <form action="/data" method="POST" enctype="multipart/form-data">
       Upload a csv-formatted file of weight entries.  Format is
@@ -28,5 +20,4 @@
       <br>
       <input type="submit" value="Add Data">
     </form>
-  </body>
-</html>
+{% endblock content %}

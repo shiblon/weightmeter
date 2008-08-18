@@ -126,6 +126,8 @@ class DateDelta(object):
     DateDelta(5, -2, 0, 0, 3, 0)
     >>> DateDelta.fromstring("+5y-2mm")
     DateDelta(5, -2, 0, 0, 1, 1)
+    >>> DateDelta.fromstring("")
+    DateDelta(0, 0, 0, 0, None, None)
     """
     if today is None:
       today = datetime.date.today()
@@ -394,7 +396,7 @@ def dates_from_path(spath, epath=None, today=None, default_start='2w'):
   """
   if not spath:
     spath = default_start
-  if epath is None:
+  if not epath:
     epath = 'today'
   if today is None:
     today = datetime.date.today()
