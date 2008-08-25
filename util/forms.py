@@ -1,5 +1,8 @@
+import csv
 import logging
 from datetime import date, datetime, timedelta
+from itertools import izip, count
+from StringIO import StringIO
 
 try:
   from django import newforms as forms
@@ -97,3 +100,79 @@ class FloatChoiceField(forms.ChoiceField):
     except ValueError:
       raise forms.ValidationError("Ensure this is a floating point number")
     return float(super(FloatChoiceField, self).clean(choice_value))
+
+class CSVWeightField(forms.Field):
+  widget = forms.FileInput
+
+  def clean(self, value):
+    """Outputs an iterator over date,weight pairs"""
+    # Allow this to be used for file input or text input
+    if hasattr(value, 'file'):
+      data_file = value.file
+    else:
+      data_file = StringIO(value)
+
+    # Try all different CSV formats, starting with comma-delimited.  Break if
+    # one of them works on the first row, then assume that all other rows will
+    # use that delimiter.
+    for delimiter in (',', ' ', '\t'):
+      logging.debug("CSV import: trying delimiter '%s'", delimiter)
+      data_file.seek(0)
+      reader = csv.reader(data_file, delimiter=delimiter)
+      try:
+        logging.debug("CSV import: trying a row")
+        row = None
+        while not row:
+          try:
+            row = reader.next()
+          except StopIteration:
+            raise forms.ValidationError("Empty csv entry")
+          if not row or row[0].lstrip().startswith('#'):
+            # Skip empty rows and comment rows
+            continue
+          elif len(row) == 1:
+            # delimiter failed, or invalid format
+            raise csv.Error("Invalid data for delimiter '%s'" % delimiter)
+        # Found one that works, so create an iterator and pass it out
+        def weight_csv_row_iter():
+          data_file.seek(0)
+          reader = csv.reader(data_file, delimiter=delimiter)
+          for lineno, row in izip(count(1), reader):
+            if not row or row[0].lstrip().startswith('#'):
+              continue
+            elif len(row) < 2:
+              raise forms.ValidationError("Invalid entry at line %d: %r" %
+                                          (lineno, row))
+            else:
+              datestr, weightstr = row[:2]
+
+              if weightstr in ('-', '_', ''):
+                weightstr = '-1'
+
+              for dateformat in ('%m/%d/%Y', '%Y-%m-%d'):
+                try:
+                  date = datetime.strptime(datestr, dateformat).date()
+                  break
+                except ValueError:
+                  pass
+              else:
+                raise forms.ValidationError("Invalid date at line %d: %r" %
+                                            (lineno, datestr))
+
+              try:
+                weight = float(weightstr)
+              except ValueError:
+                raise forms.ValidationError("Invalid weight at line %d: %r" %
+                                            (lineno, weightstr))
+
+              # All's well: emit
+              yield date, weight
+        return weight_csv_row_iter()
+      except csv.Error, e:
+        logging.warn("CSV delimiter '%s' invalid for uploaded data", delimiter)
+    else:
+      data_file.seek(0)
+      line = data_file.readline()
+      data_file.close()
+      logging.error("Unrecognized csv format: '%s'", line)
+      raise forms.ValidationError("Unrecognized csv format: '%s'" % line)

@@ -27,7 +27,10 @@ from datamodel import decaying_average_iter, full_entry_iter
 from dateutil import DateDelta, dates_from_path
 from graph import chartserver_bounded_size, chartserver_weight_url
 from urlparse import urlparse, urlunparse
-from util.forms import FloatChoiceField, FloatField, DateSelectField
+from util.forms import FloatChoiceField
+from util.forms import FloatField
+from util.forms import DateSelectField
+from util.forms import CSVWeightField
 from util.handlers import RequestHandler
 from wsgiutil import ParamSanitizer, escape_qp
 
@@ -139,97 +142,72 @@ class ShowGraph(RequestHandler):
       weight_data.update(date, weight)
       return self.redirect(ShowGraph.get_url(implicit_args=True))
 
-class DataImport(RequestHandler):
-  def POST(self, *args):
-    # TODO: use param sanitizer
-    # TODO: Create a CSV data sanitizer
-    # TODO: verify that the file format is correct
-    posted_data = ''
-    
-    if self.request.get('entries_csv_file'):
-      posted_data = self.request.POST['entries_csv_file'].value
-    if posted_data and not posted_data.endswith('\n'):
-      posted_data += '\n'
-    posted_data += self.request.get('entries_csv_text', '')
+class CSVFileForm(forms.Form):
+  csvdata = CSVWeightField(widget=forms.FileInput)
 
-    if not posted_data:
-      # TODO: show an error message
-      self.redirect('/data')
-      return
+class CSVTextForm(forms.Form):
+  csvdata = CSVWeightField(widget=forms.Textarea(attrs={
+                                                 'rows': 8,
+                                                 'cols': 30,
+                                                 }))
 
-    # Try all different CSV formats, starting with comma-delimited.  Break if
-    # one of them works on the first row, then assume that all other rows will
-    # use that delimiter.
-    data_file = StringIO(posted_data)
-    for delimiter in ', \t':
-      logging.debug("CSV import: trying delimiter '%s'", delimiter)
-      data_file.seek(0)
-      reader = csv.reader(data_file, delimiter=delimiter)
-      try:
-        logging.debug("CSV import: trying a row")
-        row = []
-        while len(row) == 0:
-          row = reader.next()
-          if len(row) == 1:  # delimiter failed, or invalid format
-            raise csv.Error("Invalid data for delimiter '%s'" % delimiter)
-        # Found one that works, so start over, create the new reader, and bail
-        data_file.seek(0)
-        reader = csv.reader(data_file, delimiter=delimiter)
-        break
-      except csv.Error, e:
-        logging.warn("CSV delimiter '%s' invalid for uploaded data", delimiter)
-    else:
-      data_file.seek(0)
-      logging.error("Unrecognized csv format: '%s'", data_file.readline())
-      # TODO: show an error to the user in some meaningful way
-      self.redirect('/data')
+class Data(RequestHandler):
+  def _render(self, fileform=None, textform=None, successful_command=None):
+    logging.debug("Data url: %r" % Data.get_url(implicit_args=True))
+    if fileform is None:
+      fileform = CSVFileForm()
+    if textform is None:
+      textform = CSVTextForm()
 
-    entries = []
-    for row in reader:
-      if len(row) < 2:
-        logging.error("Invalid row in imported data '%s'", ",".join(row))
-        continue
-      else:
-        datestr, weightstr = row[:2]
-
-        if weightstr in ('-', '_', ''):
-          weightstr = '-1'  # replace with invalid float
-
-        if '/' in datestr:
-          format = "%m/%d/%Y"
-        else:
-          format = "%Y-%m-%d"
-
-        try:
-          date = datetime.datetime.strptime(datestr, format).date()
-        except ValueError, e:
-          logging.error("Invalid date entry '%s'", datestr)
-          continue
-
-        try:
-          weight = float(weightstr)
-        except ValueError, e:
-          logging.error("Invalid weight entry '%s'", weightstr)
-          continue
-
-      entries.append((date, weight))
-
-    # Now we shove the entries into the database
-    user_info = get_current_user_info()
-    weight_data = WeightData(user_info)
-    weight_data.batch_update(entries)
-
-    self.redirect(self.request.get('redir_url', '/index'))
-
-  def get(self, mpath):
     template_values = {
-        'user': users.get_current_user(),
-        'logout_url': users.create_logout_url(self.request.uri),
-        'csv_link': '/csv?s=*',
-        }
-
+      'user': users.get_current_user(),
+      'fileform': fileform,
+      'textform': textform,
+      # TODO
+      # TODO: show a message when data is successfully updated
+      # TODO
+      'success': bool(successful_command),
+    }
     path = template_path('data.html')
-    self.response.out.write(template.render(path, template_values))
+    return self.response.out.write(template.render(path, template_values))
+
+  def post(self, mpath, command=''):
+    if command == 'file':
+      # POST a file
+      fileform = CSVFileForm(self.request)
+      textform = CSVTextForm()  # for template output
+      activeform = fileform
+    elif command == 'text':
+      # POST a textarea
+      fileform = CSVFileForm()  # for template output
+      textform = CSVTextForm(self.request)
+      activeform = textform
+    else:
+      # This shouldn't be a 'post': redirect to the main data page
+      logging.error("Invalid data command: %r", command)
+      return self.redirect(Data.get_url(implicit_args=(mpath,)), permanent=True)
+
+    if not activeform.is_valid():
+      return self._render(fileform=fileform,
+                          textform=textform)
+    else:
+      # Cleaned data is a date,weight pair iterator
+      user_info = get_current_user_info()
+      weight_data = WeightData(user_info)
+      try:
+        entries = list(activeform.clean_data['csvdata'])
+        if entries:
+          weight_data.batch_update(entries)
+        else:
+          raise forms.ValidationError("No valid entries specified")
+      except forms.ValidationError, e:
+        activeform.errors['csvdata'] = e.messages
+        return self._render(fileform=fileform,
+                            textform=textform)
+      return self.redirect(Data.get_url(implicit_args=True))
+
+  def get(self, mpath, command=''):
+    return self._render(successful_command=command)
 
 class SettingsForm(forms.Form):
   scale_resolution = FloatChoiceField(
@@ -307,8 +285,12 @@ class DefaultRoot(RequestHandler):
 
 def main():
   template.register_template_library('templatestuff')
-  # In order to allow for a bare "graph" url, we specify it twice.  Simpler
-  # that way.  Django gets less confused when path elements are truly optional.
+  # In order to allow for a bare "graph" url, we specify it multiple times.
+  # You'll see that pattern repeated with other URLs.  This approach allows the
+  # somewhat broken Django regex parser to figure out how to generate URLs for
+  # {% url %} tags.  It is technically possible to do it with | entries inside
+  # of parenthesized expressions, but this confuses Django (it thinks all
+  # arguments are required when they aren't.
   application = webapp.WSGIApplication(
       [
         ('(/m|)/graph/([^/]+)/([^/]+)', ShowGraph),
@@ -316,7 +298,8 @@ def main():
         ('(/m|)/graph', ShowGraph),
         ('(/m|)/settings', Settings),
         ('(/m|)/logout', Logout),
-        ('(/m|)/data', DataImport),
+        ('(/m|)/data/([^/]+)', Data),
+        ('(/m|)/data', Data),
         ('/csv/([^/]+)/([^/]+)', CsvDownload),
         ('/csv/([^/]+)', CsvDownload),
         ('/csv', CsvDownload),

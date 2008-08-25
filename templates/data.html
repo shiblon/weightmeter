@@ -7,7 +7,7 @@
     <p class="simple_border">
       Export weight entries to <a href="{% url CsvDownload %}">CSV</a>
     </p>
-    <form action="/data" method="POST" enctype="multipart/form-data" class="simple_border">
+    <form action="{% url Data "file" %}" method="POST" enctype="multipart/form-data" class="simple_border">
       Import a CSV file of weight entries, e.g.,
       <pre>
       2008-04-01,192.5
@@ -17,8 +17,20 @@
       Dates can be YYYY-MM-DD or MM/DD/YYYY<br>
       Values can be separated by commas, spaces, or tabs<br>
       </p>
-      <input type="file" name="entries_csv_file">
+      {% for error in fileform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
+      {{ fileform.csvdata }}
       <input type="submit" value="Submit">
+    </form>
+    <p/>
+    <form action="{% url Data "text" %}" method="POST" class="simple_border">
+      Cut and paste CSV entries<br>
+      {% for error in textform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
+      {{ textform.csvdata }}
+      <input type="submit">
+    </form>
+    <p/>
+    <form action="/data/clear" method="POST" class="simple_border">
+      Clear all entries: <input type="submit" value="Yes, wipe out all of my history">
     </form>
     </div>
 {% endblock content %}
