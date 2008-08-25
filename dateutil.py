@@ -383,6 +383,8 @@ def dates_from_path(spath, epath=None, today=None, default_start='2w'):
   If two relative dates are specified, the first is counted backward from
   "today", and the second is counted forward from that.
 
+  Also, the first date may be the word "all", which indicates to go back as far as 1900-01-01 and stop at today (the second parameter is ignored if present).
+
   >>> import datetime
   >>> today = datetime.datetime(2008, 8, 31)
   >>> dates_from_path('/2008-08-04', '/2008-08-11')
@@ -400,6 +402,9 @@ def dates_from_path(spath, epath=None, today=None, default_start='2w'):
     epath = 'today'
   if today is None:
     today = datetime.date.today()
+
+  if spath.lower().strip() == 'all':
+    return datetime.date(1900, 1, 1), today
 
   # Handle datetime objects (we like date objects better)
   if hasattr(today, 'date') and hasattr(today.date, "__call__"):

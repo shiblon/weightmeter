@@ -1,22 +1,13 @@
 {% extends "base_template.html" %}
 
 {% block content %}
-<div style="width: auto">
-  <form method="POST" action="{{ update_url }}">
-  <div class="simple_border">
-    <fieldset>{% for field in form %}{{ field.label_tag }}: {{ field }} {% endfor %}<input type=submit value="Update"></fieldset>
+  <form method="POST" action="{% url ShowGraph %}">
+  <div class="simple_border medium_text">
+    {% if form.errors %}<div class="error">Correct marked entries below and try again.</div><br>{% endif %}
+    <fieldset>{% for field in form %}<span class="form_label{% if field.errors %} error{% endif %}">{{ field.label_tag }}{% if field.errors %}<span class="error">*</span>{% endif %}: {{ field }} {% endfor %}<input type=submit value="Update"></fieldset>
   </div>
   </form>
   <div class="simple_border chart_image">
-  <div style="width: {{ img.width }}px;">
-  <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"><br>
-  <div class="graph_link_text tiny">
-  {% for duration in durations %}
-  <a class="graph_link" href="{% url ShowGraph duration %}">{{ duration }}</a>
-  {% if not forloop.last %} |{% endif %}
-  {% endfor %}
+    {% include "weight_chart.html" %}
   </div>
-  </div>
-  </div>
-</div>
-{% endblock %}
+{% endblock content %}

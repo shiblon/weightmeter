@@ -1,5 +1,5 @@
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 try:
   from django import newforms as forms
@@ -17,8 +17,8 @@ class FloatSelect(forms.Select):
     return super(FloatSelect, self).render(name, value, *args, **kargs)
 
 class DateSelect(forms.Select):
-  def __init__(self, num_days=14, dispfmt="%a, %b %d", labelfmt="%Y-%m-%d",
-               attrs=None):
+  def __init__(self, num_days=14, dispfmt="%a, %b %d",
+               labelfmt="%Y-%m-%d", attrs=None):
     self.num_days = num_days
     self.dispfmt = dispfmt
     self.labelfmt = labelfmt
@@ -29,7 +29,7 @@ class DateSelect(forms.Select):
     if not value:
       value = date.today()
     elif isinstance(value, basestring):
-      value = datetime.strptime('%Y-%m-%d').date()
+      value = datetime.strptime(value, '%Y-%m-%d').date()
 
     # -1 so that we are inclusive of the initial value.  -2 just in case we
     # have a bad timezone interaction on the east side of GMT.
@@ -38,6 +38,16 @@ class DateSelect(forms.Select):
     choices = [(d.strftime(self.labelfmt), d.strftime(self.dispfmt))
                for d in dates]
     return super(DateSelect, self).render(name, value, attrs, choices)
+
+class DateSelectField(forms.DateField):
+  def __init__(self, num_days=14, dispfmt="%a, %b %d", labelfmt="%Y-%m-%d",
+               *args, **kargs):
+    super(DateSelectField, self).__init__(input_formats=[labelfmt],
+                                          widget=DateSelect(num_days=num_days,
+                                                            dispfmt=dispfmt,
+                                                            labelfmt=labelfmt),
+                                          *args,
+                                          **kargs)
 
 class FloatField(forms.CharField):
   def __init__(self, floatfmt="%0.02f", max_length=None, min_length=None,

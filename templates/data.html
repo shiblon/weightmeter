@@ -3,21 +3,22 @@
 {% block title %}Weight Meter Data{% endblock title %}
 
 {% block content %}
-    <p><a href="{{ csv_link }}">Get data as csv</a></p>
-    <form action="/data" method="POST" enctype="multipart/form-data">
-      Upload a csv-formatted file of weight entries.  Format is
+    <div class="medium_text">
+    <p class="simple_border">
+      Export weight entries to <a href="{% url CsvDownload %}">CSV</a>
+    </p>
+    <form action="/data" method="POST" enctype="multipart/form-data" class="simple_border">
+      Import a CSV file of weight entries, e.g.,
       <pre>
       2008-04-01,192.5
       2008-04-02,193.0
       ...</pre>
-
-      Dates can be in either YYYY-MM-DD or MM/DD/YYYY format<br>
+      <p class="small_text">
+      Dates can be YYYY-MM-DD or MM/DD/YYYY<br>
+      Values can be separated by commas, spaces, or tabs<br>
+      </p>
       <input type="file" name="entries_csv_file">
-      <br>
-      <br>
-      Alternatively, paste csv contents here (note, you can do both at once if you really want to):<br>
-      <textarea name="entries_csv_text" cols="50" rows="10"></textarea>
-      <br>
-      <input type="submit" value="Add Data">
+      <input type="submit" value="Submit">
     </form>
+    </div>
 {% endblock content %}

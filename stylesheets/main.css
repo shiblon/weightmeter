@@ -15,6 +15,7 @@ label {
   color: #aaa;
   width: 100%;
   text-align: center;
+  font-size: 7pt;
 }
 
 .selected_link {
@@ -38,8 +39,12 @@ fieldset {
   font-variant: normal;
 }
 
-.tiny {
-  font-size: .75em;
+.small_text {
+  font-size: 7pt;
+}
+
+.medium_text {
+  font-size: 9pt;
 }
 
 .centered {
@@ -50,8 +55,9 @@ fieldset {
   color: #ccc;
 }
 
-.form_error {
+.error {
   color: #f55;
+  font-weight: bold;
 }
 
 .form_table {
