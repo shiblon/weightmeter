@@ -9,11 +9,11 @@
 {% endfor %}
 </div>
 {% if entries %}
-<p>
+<p class="small_text">
 Date <b>scale weight</b> (trend)
 </p>
 {% for entry in entries %}
-<p>
+<p class="small_text">
 {{ entry.0 }}
 <b>{{ entry.1|floatformat:2 }}</b>
 ({{ entry.2|floatformat:2 }})
