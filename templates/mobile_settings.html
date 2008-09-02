@@ -1,10 +1,11 @@
 {% extends "mobile_base_template.html" %}
 
 {% block content %}
-    <form action="{% url MobileSettings %}" method="POST">
-      <table class="form_table">
-        {{ form }}
-      </table>
-      <input type="submit" value="Update"> {% ifequal state 'complete' %}<span class="update_message">Update Completed</span>{% endifequal %}
-    </form>
+<form action="{% url MobileSettings %}" method="POST">
+{% include "xsrf_input.html" %}
+<table class="form_table">
+  {{ form }}
+</table>
+<input type="submit" value="Update"> {% ifequal state 'complete' %}<span class="update_message">Update Completed</span>{% endifequal %}
+</form>
 {% endblock content %}

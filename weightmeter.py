@@ -43,6 +43,8 @@ from util.forms import FloatField
 from util.forms import DateSelectField
 from util.forms import CSVWeightField
 from util.handlers import RequestHandler
+from util.xsrf import xsrf_aware
+from util.xsrf import TOKEN_NAME as XSRF_TOKEN_NAME
 # TODO: get rid of this - make param sanitizer its own thing in the util
 # directory
 from wsgiutil import ParamSanitizer
@@ -64,6 +66,9 @@ DEFAULT_GRAPH_HEIGHT = 400
 
 MAX_GRAPH_SAMPLES = 200
 
+##############################################################################
+# Functions
+##############################################################################
 def template_path(name):
   return os.path.join(os.path.dirname(__file__), 'templates', name)
 
@@ -72,16 +77,45 @@ def get_current_user_info():
   assert user is not None
   return UserInfo.get_or_insert('u:' + user.email(), user=user)
 
-class WeightEntryForm(forms.Form):
-  date = DateSelectField()
-  weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
-
 def chart_url(weight_data, width, height, start, end, gamma):
   cw, ch = chartserver_bounded_size(width, height)
   samples = min(MAX_GRAPH_SAMPLES, cw // 4)
   smoothed_iter = weight_data.smoothed_weight_iter(start, end, samples, gamma)
   return chartserver_weight_url(cw, ch, smoothed_iter)
 
+##############################################################################
+# Forms
+##############################################################################
+
+class WeightEntryForm(forms.Form):
+  date = DateSelectField()
+  weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
+
+class CSVFileForm(forms.Form):
+  csvdata = CSVWeightField(widget=forms.FileInput)
+
+class CSVTextForm(forms.Form):
+  csvdata = CSVWeightField(widget=forms.Textarea(attrs={
+                                                 'rows': 8,
+                                                 'cols': 30,
+                                                 }))
+
+class SettingsForm(forms.Form):
+  scale_resolution = FloatChoiceField(
+    initial=.5,
+    floatfmt='%0.02f',
+    float_choices=[.1, .2, .25, .5, 1.],
+  )
+  gamma = FloatChoiceField(
+    initial=.9,
+    floatfmt='%0.02f',
+    float_choices=(.7, .75, .8, .85, .9, .95, 1.),
+    label="Decay weight",
+  )
+
+##############################################################################
+# Handlers
+##############################################################################
 class Graph(RequestHandler):
   _default_graph_width = DEFAULT_GRAPH_WIDTH
   _default_graph_height = DEFAULT_GRAPH_HEIGHT
@@ -134,6 +168,7 @@ class Graph(RequestHandler):
         'user': users.get_current_user(),
         'form': form,
         'durations': DEFAULT_DURATIONS,
+        XSRF_TOKEN_NAME: self._xsrf_token,
         }
 
     path = self._template_path()
@@ -145,11 +180,13 @@ class Graph(RequestHandler):
   def _on_success(self):
     return self.redirect(Graph.get_url())
 
+  @xsrf_aware('update_weight', get_current_user_info)
   def get(self):
     # Get the settings and info for this user
     user_info = get_current_user_info()
     self._render(user_info)
 
+  @xsrf_aware('update_weight', get_current_user_info)
   def post(self):
     """Updates a single weight entry."""
     user_info = get_current_user_info()
@@ -176,15 +213,6 @@ class MobileGraph(Graph):
 
   def _on_success(self):
     return self.redirect(MobileGraph.get_url())
-
-class CSVFileForm(forms.Form):
-  csvdata = CSVWeightField(widget=forms.FileInput)
-
-class CSVTextForm(forms.Form):
-  csvdata = CSVWeightField(widget=forms.Textarea(attrs={
-                                                 'rows': 8,
-                                                 'cols': 30,
-                                                 }))
 
 class MobileData(RequestHandler):
   def get(self):
@@ -229,6 +257,7 @@ class Data(RequestHandler):
       'success': bool(successful_command),
       'entries': list(smoothed_iter),
       'durations': DEFAULT_DURATIONS,
+      XSRF_TOKEN_NAME: self._xsrf_token,
     }
     path = template_path('data.html')
     return self.response.out.write(template.render(path, template_values))
@@ -271,6 +300,7 @@ class Data(RequestHandler):
     # TODO: implement deletion of all data
     return self.redirect(Data.get_url())
 
+  @xsrf_aware('data', get_current_user_info)
   def post(self):
     cmd = self.request.get('cmd')
     if cmd == 'add':
@@ -282,21 +312,9 @@ class Data(RequestHandler):
       logging.error("Invalid post command: %r", cmd)
       return self.redirect(Data.get_url())
 
+  @xsrf_aware('data', get_current_user_info)
   def get(self):
     return self._render()
-
-class SettingsForm(forms.Form):
-  scale_resolution = FloatChoiceField(
-    initial=.5,
-    floatfmt='%0.02f',
-    float_choices=[.1, .2, .25, .5, 1.],
-  )
-  gamma = FloatChoiceField(
-    initial=.9,
-    floatfmt='%0.02f',
-    float_choices=(.7, .75, .8, .85, .9, .95, 1.),
-    label="Decay weight",
-  )
 
 class MobileSettings(webapp.RequestHandler):
   def _render(self, user_info, form):
@@ -305,6 +323,7 @@ class MobileSettings(webapp.RequestHandler):
       'index_url': '/index',
       'data_url': '/data',
       'form': form,
+      XSRF_TOKEN_NAME: self._xsrf_token,
     }
 
     path = self._template_path()
@@ -316,6 +335,7 @@ class MobileSettings(webapp.RequestHandler):
   def _on_success(self):
     return self.redirect(MobileGraph.get_url())
 
+  @xsrf_aware('data', get_current_user_info)
   def post(self):
     user_info = get_current_user_info()
     form = SettingsForm(self.request.POST)
@@ -332,6 +352,7 @@ class MobileSettings(webapp.RequestHandler):
       # Send the user to the default front page after settings are altered.
       return self._on_success()
 
+  @xsrf_aware('data', get_current_user_info)
   def get(self):
     user_info = get_current_user_info()
     form = SettingsForm(initial={'gamma': user_info.gamma,
@@ -384,6 +405,9 @@ class DefaultRoot(RequestHandler):
   def get(self):
     self.redirect(Graph.get_url())
 
+##############################################################################
+# Main
+##############################################################################
 def main():
   template.register_template_library('templatestuff')
   # In order to allow for a bare "graph" url, we specify it multiple times.

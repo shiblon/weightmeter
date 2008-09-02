@@ -6,15 +6,17 @@ import logging
 from google.appengine.ext import db
 from itertools import izip
 
-BLOCK_SIZE=35  # never change this!
 DEFAULT_QUERY_SIZE=35
 DEFAULT_QUERY_DAYS=14
 DECAY_SETUP_DAYS = 14
+
+_BLOCK_SIZE=35  # never change this!
 
 class UserInfo(db.Expando):
   user = db.UserProperty(required=True)
   scale_resolution = db.FloatProperty(required=True, default=0.5)
   gamma = db.FloatProperty(required=True, default=0.9)
+  xsrf_secret = db.StringProperty()
 
 class WeightBlock(db.Model):
   """Contains a block of weight entries, starting with day_zero (in Proleptic
@@ -52,14 +54,14 @@ class WeightData(object):
 
   @staticmethod
   def _day_zero(day):
-    return day - (day % BLOCK_SIZE)
+    return day - (day % _BLOCK_SIZE)
 
   def _get_block(self, day_zero):
     return WeightBlock.get_or_insert(
         key_name=WeightBlock._WeightBlock_key_name(day_zero),
         parent=self.user_info,
         user_info=self.user_info,
-        weight_entries=[-1.0] * BLOCK_SIZE,
+        weight_entries=[-1.0] * _BLOCK_SIZE,
         day_zero=day_zero)
 
   def most_recent_entry(self):
@@ -82,7 +84,7 @@ class WeightData(object):
       return None
     else:
       block = values[0]
-      for rel_day in range(BLOCK_SIZE-1, -1, -1):
+      for rel_day in range(_BLOCK_SIZE-1, -1, -1):
         entry = block.weight_entries[rel_day]
         if entry >= 0.0:
           return datetime.date.fromordinal(block.day_zero + rel_day), entry
@@ -173,7 +175,7 @@ class WeightData(object):
     block = self._get_block(day_zero)
 
     block_index = day - day_zero
-    assert 0 <= block_index < BLOCK_SIZE
+    assert 0 <= block_index < _BLOCK_SIZE
 
     block.weight_entries[block_index] = weight
     block.put()

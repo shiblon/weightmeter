@@ -1,11 +1,11 @@
 {% extends "base_template.html" %}
 
 {% block content %}
-<p/>
 <form action="{% url Settings %}" method="POST" class="simple_border">
-  <table class="form_table">
-    {{ form }}
-  </table>
-  <input type="submit" value="Update"> {% ifequal state 'complete' %}<span class="update_message">Update Completed</span>{% endifequal %}
+{% include "xsrf_input.html" %}
+<table class="form_table">
+  {{ form }}
+</table>
+<input type="submit" value="Update"> {% ifequal state 'complete' %}<span class="update_message">Update Completed</span>{% endifequal %}
 </form>
 {% endblock content %}
