@@ -370,9 +370,11 @@ class CsvDownload(RequestHandler):
 
 class Logout(RequestHandler):
   def get(self):
-    self.redirect(users.create_logout_url())
+    self.redirect(users.create_logout_url(Graph.get_url()))
 
-class MobileLogout(Logout): pass
+class MobileLogout(Logout):
+  def get(self):
+    self.redirect(users.create_logout_url(MobileGraph.get_url()))
 
 class MobileDefaultRoot(RequestHandler):
   def get(self):
