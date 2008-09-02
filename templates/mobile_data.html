@@ -9,6 +9,7 @@
 {% endfor %}
 </div>
 <table class="small_text" border="0" cellspacing="0" cellpadding="1">
+{% if entries %}
 <th>
   <td style="font-weight: bold">Scale</td>
   <td style="font-weight: bold">Trend</td>
@@ -20,6 +21,11 @@
   <td>{{ entry.2|floatformat:2 }}</td>
 </tr>
 {% endfor %}
+{% else %}
+<tr>
+  <td>No entries</td>
+</tr>
+{% endif %}
 </table>
 <div class="graph_link_text simple_border">
 {% for duration in durations %}
