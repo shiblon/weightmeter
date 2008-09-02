@@ -329,13 +329,13 @@ def try_to_parse_absolute_date(datestr):
   else:
     return None
 
-def dates_from_path(spath, epath=None, today=None, default_start='2w'):
+def dates_from_args(start, end=None, today=None, default_start='2w'):
   """
   Params:
-    spath - start date path component
-    epath - end date path component
+    start - start date path component
+    end - end date path component
     today - datetime (or date) object representing today
-    default_start - default spath value if no spath is specified.
+    default_start - default start value if no start is specified.
 
   Returns:
     (start_date, end_date): datetime.date objects
@@ -396,41 +396,45 @@ def dates_from_path(spath, epath=None, today=None, default_start='2w'):
   >>> dates_from_path('4m', '2m', today)
   (datetime.date(2008, 4, 30), datetime.date(2008, 6, 30))
   """
-  if not spath:
-    spath = default_start
-  if not epath:
-    epath = 'today'
+  if not start:
+    start = default_start
+  if not end:
+    end = 'today'
   if today is None:
     today = datetime.date.today()
 
-  if spath.lower().strip() == 'all':
+  # Get rid of spaces
+  end = end.replace(' ', '')
+  start = start.replace(' ', '')
+
+  if start.lower().strip() == 'all':
     return datetime.date(1900, 1, 1), today
 
   # Handle datetime objects (we like date objects better)
   if hasattr(today, 'date') and hasattr(today.date, "__call__"):
     today = today.date()
 
-  spath = spath.strip('/')
-  epath = epath.strip('/')
+  start = start.strip('/')
+  end = end.strip('/')
 
   # parses the date or returns None if unsuccessful
-  if spath == 'today':
+  if start == 'today':
     sdate = today
   else:
-    sdate = try_to_parse_absolute_date(spath)
+    sdate = try_to_parse_absolute_date(start)
     if not sdate:
       # Not an absolute date: try a relative one
-      delta = DateDelta.fromstring(spath)
+      delta = DateDelta.fromstring(start)
       delta.invert()  # reverse the sense: going backward
       sdate = delta.add_to_date(today)
 
-  if epath == 'today':
+  if end == 'today':
     edate = today
   else:
-    edate = try_to_parse_absolute_date(epath)
+    edate = try_to_parse_absolute_date(end)
     if not edate:
       # Try relative to the sdate
-      delta = DateDelta.fromstring(epath)
+      delta = DateDelta.fromstring(end)
       edate = delta.add_to_date(sdate)
 
   return sdate, edate

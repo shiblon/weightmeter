@@ -25,7 +25,7 @@ from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries, decaying_average_iter, full_entry_iter
 from graph import chartserver_bounded_size, chartserver_weight_url
 from urlparse import urlparse, urlunparse
-from util.dates import DateDelta, dates_from_path
+from util.dates import DateDelta, dates_from_args
 from util.forms import FloatChoiceField
 from util.forms import FloatField
 from util.forms import DateSelectField
@@ -61,11 +61,15 @@ class WeightEntryForm(forms.Form):
   weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
 
 class MobileGraph(RequestHandler):
-  def _render(self, spath, epath, user_info, form=None):
+  def _render(self, user_info, form=None):
     # TODO: Time zone
     today = datetime.date.today()
+
+    start = self.request.get('s', '')
+    end = self.request.get('e', '')
+
     # TODO: make a user_info setting for the default duration
-    sdate, edate = dates_from_path(spath, epath, today,
+    sdate, edate = dates_from_args(start, end, today,
                                    default_start=DEFAULT_GRAPH_DURATION)
     weight_data = WeightData(user_info)
 
@@ -111,19 +115,12 @@ class MobileGraph(RequestHandler):
     path = template_path('mobile_index.html')
     return self.response.out.write(template.render(path, template_values))
 
-  def get(self, spath='', epath=''):
-    """Get the graph page.
-
-    Params:
-      spath - start date path component (optional)
-      epath - end date path component (optional)
-    """
-
+  def get(self):
     # Get the settings and info for this user
     user_info = get_current_user_info()
-    self._render(spath, epath, user_info)
+    self._render(user_info)
 
-  def post(self, spath='', epath=''):
+  def post(self):
     """Updates a single weight entry."""
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
@@ -132,7 +129,7 @@ class MobileGraph(RequestHandler):
     logging.debug("POST data: %r", self.request.POST)
     if not form.is_valid():
       logging.debug("Invalid form")
-      return self._render(spath, epath, user_info, form)
+      return self._render(user_info, form)
     else:
       logging.debug("valid form")
       date = form.clean_data['date']
@@ -154,11 +151,13 @@ class CSVTextForm(forms.Form):
                                                  }))
 
 class MobileData(RequestHandler):
-  def get(self, spath='', epath=''):
+  def get(self):
     # TODO: Time zone
     today = datetime.date.today()
     # TODO: make a user_info setting for the default duration
-    sdate, edate = dates_from_path(spath, epath, today,
+    start = self.request.get('s', '')
+    end = self.request.get('e', '')
+    sdate, edate = dates_from_args(start, end, today,
                                    default_start=DEFAULT_GRAPH_DURATION)
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
@@ -169,6 +168,7 @@ class MobileData(RequestHandler):
       'user': users.get_current_user(),
       'user_info': user_info,
       'entries': list(smoothed_iter),
+      'durations': ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w'),
     }
     path = template_path('mobile_data.html')
     return self.response.out.write(template.render(path, template_values))
@@ -277,12 +277,12 @@ class MobileSettings(webapp.RequestHandler):
     return self._render(user_info, form)
 
 class CsvDownload(RequestHandler):
-  def GET(self, spath='', epath=''):
+  def get(self, start='', end=''):
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
 
     today = datetime.date.today()
-    sdate, edate = dates_from_path(spath, epath, today, default_start='all')
+    sdate, edate = dates_from_args(start, end, today, default_start='all')
 
     self.response.headers['Content-Type'] = 'application/octet-stream'
     self.response.headers.add_header('Content-Disposition',
@@ -317,15 +317,10 @@ def main():
   # arguments are required when they aren't.
   application = webapp.WSGIApplication(
       [
-        ('/m/graph/([^/]+)/([^/]+)/?', MobileGraph),
-        ('/m/graph/([^/]+)/?', MobileGraph),
-        ('/m/graph/?', MobileGraph),
-        # TODO: implement mobile data view
-        ('/m/data/([^/]+)/([^/]+)/?', MobileData),
-        ('/m/data/([^/]+)/?', MobileData),
-        ('/m/data/?', MobileData),
-        ('/m/settings/?', MobileSettings),
-        ('/m/logout/?', Logout),
+        ('/m/graph', MobileGraph),
+        ('/m/data', MobileData),
+        ('/m/settings', MobileSettings),
+        ('/m/logout', Logout),
         ('/m/?', MobileDefaultRoot),
         ('/graph/([^/]+)/([^/]+)/?', Graph),
         ('/graph/([^/]+)/?', Graph),
