@@ -1,4 +1,4 @@
-{% extends "base_template.html" %}
+{% extends "mobile_base_template.html" %}
 
 {% block title %}Weight Meter Data{% endblock title %}
 
@@ -8,7 +8,7 @@
 Data updated
 </div>
 {% endif %}
-    <div class="medium_text">
+    <div class="small_text">
     <p class="simple_border">
       Export weight entries to <a href="{% url CsvDownload %}">CSV</a>
     </p>

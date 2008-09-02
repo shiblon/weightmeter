@@ -140,7 +140,7 @@ class WeightData(object):
         if start_day <= day <= end_day and weight >= 0.0:
           yield datetime.date.fromordinal(day), weight
 
-  def smoothed_weight_iter(self, start, end, samples, gamma=0.9):
+  def smoothed_weight_iter(self, start, end, samples=None, gamma=0.9):
     # Start a few days early so that we can get the smoothing primed
     early_d1 = start - datetime.timedelta(days=DECAY_SETUP_DAYS)
     early_d2 = start
@@ -151,10 +151,12 @@ class WeightData(object):
       smooth_start = early_smoothed[-1][-1]
 
     # Get the sampled raw weights and smoothed function:
-    smoothed_iter = decaying_average_iter(
-        sample_entries(self.query(start, end), start, end, samples),
-        gamma=gamma,
-        start=smooth_start)
+    entry_iter = self.query(start, end)
+    if samples is not None:
+      entry_iter = sample_entries(entry_iter, start, end, samples)
+    smoothed_iter = decaying_average_iter(entry_iter,
+                                          gamma=gamma,
+                                          start=smooth_start)
 
     return smoothed_iter
 

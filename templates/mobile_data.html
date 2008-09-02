@@ -1,0 +1,19 @@
+{% extends "mobile_base_template.html" %}
+
+{% block title %}Weight Meter Data{% endblock title %}
+
+{% block content %}
+<table class="medium_text" border="1" cellspacing="1" cellpadding="1">
+<th>
+  <td>Weight</td>
+  <td>Smoothed</td>
+</th>
+{% for entry in entries %}
+<tr>
+  <td>{{ entry.0 }}</td>
+  <td>{{ entry.1 }}</td>
+  <td>{{ entry.2 }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock content %}

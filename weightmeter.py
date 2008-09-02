@@ -59,7 +59,7 @@ class WeightEntryForm(forms.Form):
   date = DateSelectField()
   weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
 
-class MobileMainPage(RequestHandler):
+class MobileGraph(RequestHandler):
   def _render(self, spath, epath, user_info, form=None):
     # TODO: Time zone
     today = datetime.date.today()
@@ -137,9 +137,9 @@ class MobileMainPage(RequestHandler):
       date = form.clean_data['date']
       weight = form.clean_data['weight']
       weight_data.update(date, weight)
-      return self.redirect(MobileMainPage.get_url(implicit_args=True))
+      return self.redirect(MobileGraph.get_url(implicit_args=True))
 
-class MainPage(RequestHandler):
+class Graph(RequestHandler):
   def get(self):
     return self.response.out.write("Main page")
 
@@ -151,6 +151,26 @@ class CSVTextForm(forms.Form):
                                                  'rows': 8,
                                                  'cols': 30,
                                                  }))
+
+class MobileData(RequestHandler):
+  def get(self, spath='', epath=''):
+    # TODO: Time zone
+    today = datetime.date.today()
+    # TODO: make a user_info setting for the default duration
+    sdate, edate = dates_from_path(spath, epath, today,
+                                   default_start=DEFAULT_GRAPH_DURATION)
+    user_info = get_current_user_info()
+    weight_data = WeightData(user_info)
+    smoothed_iter = weight_data.smoothed_weight_iter(sdate,
+                                                     edate,
+                                                     gamma=user_info.gamma)
+    template_values = {
+      'user': users.get_current_user(),
+      'user_info': user_info,
+      'entries': list(smoothed_iter),
+    }
+    path = template_path('mobile_data.html')
+    return self.response.out.write(template.render(path, template_values))
 
 class Data(RequestHandler):
   def _render(self, fileform=None, textform=None, successful_command=None):
@@ -246,7 +266,7 @@ class MobileSettings(webapp.RequestHandler):
       user_info.put()
 
       # Send the user to the default front page after settings are altered.
-      return self.redirect(MobileMainPage.get_url(implicit_args=True))
+      return self.redirect(MobileGraph.get_url(implicit_args=True))
 
   def get(self):
     user_info = get_current_user_info()
@@ -280,11 +300,11 @@ class Logout(RequestHandler):
 
 class MobileDefaultRoot(RequestHandler):
   def get(self):
-    self.redirect(MobileMainPage.get_url())
+    self.redirect(MobileGraph.get_url())
 
 class DefaultRoot(RequestHandler):
   def get(self):
-    self.redirect(MainPage.get_url())
+    self.redirect(Graph.get_url())
 
 def main():
   template.register_template_library('templatestuff')
@@ -296,15 +316,21 @@ def main():
   # arguments are required when they aren't.
   application = webapp.WSGIApplication(
       [
-        ('/m/graph/([^/]+)/([^/]+)/?', MobileMainPage),
-        ('/m/graph/([^/]+)/?', MobileMainPage),
-        ('/m/graph/?', MobileMainPage),
+        ('/m/graph/([^/]+)/([^/]+)/?', MobileGraph),
+        ('/m/graph/([^/]+)/?', MobileGraph),
+        ('/m/graph/?', MobileGraph),
+        # TODO: implement mobile data view
+        ('/m/data/([^/]+)/([^/]+)/?', MobileData),
+        ('/m/data/([^/]+)/?', MobileData),
+        ('/m/data/?', MobileData),
         ('/m/settings/?', MobileSettings),
         ('/m/logout/?', Logout),
         ('/m/?', MobileDefaultRoot),
-        ('/graph/([^/]+)/([^/]+)/?', MainPage),
-        ('/graph/([^/]+)/?', MainPage),
-        ('/graph/?', MainPage),
+        ('/graph/([^/]+)/([^/]+)/?', Graph),
+        ('/graph/([^/]+)/?', Graph),
+        ('/graph/?', Graph),
+        # TODO: implement clearing of weight data
+        # TODO: implement csrf protection
         ('/data/(text|file)', Data),
         ('/data/?', Data),
         ('/csv/([^/]+)/([^/]+)/?', CsvDownload),
