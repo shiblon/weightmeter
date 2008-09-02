@@ -24,9 +24,9 @@ except ImportError:
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries
 from datamodel import decaying_average_iter, full_entry_iter
-from dateutil import DateDelta, dates_from_path
 from graph import chartserver_bounded_size, chartserver_weight_url
 from urlparse import urlparse, urlunparse
+from util.dates import DateDelta, dates_from_path
 from util.forms import FloatChoiceField
 from util.forms import FloatField
 from util.forms import DateSelectField
