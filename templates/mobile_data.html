@@ -12,13 +12,14 @@
 <p class="small_text">
 Date <b>scale weight</b> (trend)
 </p>
-{% for entry in entries %}
 <p class="small_text">
+{% for entry in entries %}
 {{ entry.0 }}
 <b>{{ entry.1|floatformat:2 }}</b>
 ({{ entry.2|floatformat:2 }})
-</p>
+<br>
 {% endfor %}
+</p>
 {% else %}
 <i>No entries</i>
 {% endif %}
