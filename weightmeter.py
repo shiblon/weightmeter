@@ -107,7 +107,7 @@ class MobileMainPage(RequestHandler):
         'durations': ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w'),
         }
 
-    path = template_path('index.html')
+    path = template_path('mobile_index.html')
     return self.response.out.write(template.render(path, template_values))
 
   def get(self, spath='', epath=''):
@@ -138,6 +138,10 @@ class MobileMainPage(RequestHandler):
       weight = form.clean_data['weight']
       weight_data.update(date, weight)
       return self.redirect(MobileMainPage.get_url(implicit_args=True))
+
+class MainPage(RequestHandler):
+  def get(self):
+    return self.response.out.write("Main page")
 
 class CSVFileForm(forms.Form):
   csvdata = CSVWeightField(widget=forms.FileInput)
@@ -225,7 +229,7 @@ class MobileSettings(webapp.RequestHandler):
       'form': form,
     }
 
-    path = template_path('settings.html')
+    path = template_path('mobile_settings.html')
     self.response.out.write(template.render(path, template_values))
 
   def post(self):
@@ -271,12 +275,16 @@ class CsvDownload(RequestHandler):
     writer.writerows(list(weight_data.query(sdate, edate)))
 
 class Logout(RequestHandler):
-  def get(self, mpath):
-    self.redirect(users.create_logout_url(mpath))
+  def get(self):
+    self.redirect(users.create_logout_url())
+
+class MobileDefaultRoot(RequestHandler):
+  def get(self):
+    self.redirect(MobileMainPage.get_url())
 
 class DefaultRoot(RequestHandler):
-  def get(self, mpath):
-    self.redirect(MobileMainPage.get_url(mpath))
+  def get(self):
+    self.redirect(MainPage.get_url())
 
 def main():
   template.register_template_library('templatestuff')
@@ -288,17 +296,22 @@ def main():
   # arguments are required when they aren't.
   application = webapp.WSGIApplication(
       [
-        ('/m/graph/([^/]+)/([^/]+)', MobileMainPage),
-        ('/m/graph/([^/]+)', MobileMainPage),
-        ('/m/graph', MobileMainPage),
-        ('/m/settings', MobileSettings),
-        ('(/m|)/logout', Logout),
+        ('/m/graph/([^/]+)/([^/]+)/?', MobileMainPage),
+        ('/m/graph/([^/]+)/?', MobileMainPage),
+        ('/m/graph/?', MobileMainPage),
+        ('/m/settings/?', MobileSettings),
+        ('/m/logout/?', Logout),
+        ('/m/?', MobileDefaultRoot),
+        ('/graph/([^/]+)/([^/]+)/?', MainPage),
+        ('/graph/([^/]+)/?', MainPage),
+        ('/graph/?', MainPage),
         ('/data/(text|file)', Data),
-        ('/data', Data),
-        ('/csv/([^/]+)/([^/]+)', CsvDownload),
-        ('/csv/([^/]+)', CsvDownload),
-        ('/csv', CsvDownload),
-        ('(/m|)/?', DefaultRoot),
+        ('/data/?', Data),
+        ('/csv/([^/]+)/([^/]+)/?', CsvDownload),
+        ('/csv/([^/]+)/?', CsvDownload),
+        ('/csv/?', CsvDownload),
+        ('/logout/?', Logout),
+        ('/?', DefaultRoot),
         # TODO: add a default handler - 404
       ],
       debug=True)

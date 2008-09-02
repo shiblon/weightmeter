@@ -31,7 +31,7 @@ Data updated
       Cut and paste CSV entries<br>
       {% for error in textform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
       {{ textform.csvdata }}
-      <input type="submit">
+      <input type="submit" value="Submit">
     </form>
     <p/>
     <form action="/data/clear" method="POST" class="simple_border">
