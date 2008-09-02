@@ -8,25 +8,20 @@
 <a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
 {% endfor %}
 </div>
-<table class="small_text" border="0" cellspacing="0" cellpadding="1">
 {% if entries %}
-<th>
-  <td style="font-weight: bold">Scale</td>
-  <td style="font-weight: bold">Trend</td>
-</th>
+<p>
+Date <b>scale weight</b> (trend)
+</p>
 {% for entry in entries %}
-<tr>
-  <td style="padding-right: 2em">{{ entry.0 }}</td>
-  <td style="padding-right: 2em">{{ entry.1|floatformat:2 }}</td>
-  <td>{{ entry.2|floatformat:2 }}</td>
-</tr>
+<p>
+{{ entry.0 }}
+<b>{{ entry.1|floatformat:2 }}</b>
+({{ entry.2|floatformat:2 }})
+</p>
 {% endfor %}
 {% else %}
-<tr>
-  <td>No entries</td>
-</tr>
+<i>No entries</i>
 {% endif %}
-</table>
 <div class="graph_link_text simple_border">
 {% for duration in durations %}
 <a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
