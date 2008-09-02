@@ -3,6 +3,11 @@
 {% block title %}Weight Meter Data{% endblock title %}
 
 {% block content %}
+{% if success %}
+<div class="medium_text centered info">
+Data updated
+</div>
+{% endif %}
     <div class="medium_text">
     <p class="simple_border">
       Export weight entries to <a href="{% url CsvDownload %}">CSV</a>

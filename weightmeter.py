@@ -59,15 +59,13 @@ class WeightEntryForm(forms.Form):
   date = DateSelectField()
   weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
 
-class ShowGraph(RequestHandler):
-  def _render(self, mpath, spath, epath, user_info, form=None):
+class MobileMainPage(RequestHandler):
+  def _render(self, spath, epath, user_info, form=None):
     # TODO: Time zone
     today = datetime.date.today()
     # TODO: make a user_info setting for the default duration
     sdate, edate = dates_from_path(spath, epath, today,
                                    default_start=DEFAULT_GRAPH_DURATION)
-    is_mobile = bool(mpath)
-
     weight_data = WeightData(user_info)
 
     # TODO: rethink this whole param sanitizer thing
@@ -112,20 +110,19 @@ class ShowGraph(RequestHandler):
     path = template_path('index.html')
     return self.response.out.write(template.render(path, template_values))
 
-  def get(self, mpath, spath='', epath=''):
+  def get(self, spath='', epath=''):
     """Get the graph page.
 
     Params:
-      mpath - will be /m if this should be a mobile page (for handhelds)
       spath - start date path component (optional)
       epath - end date path component (optional)
     """
 
     # Get the settings and info for this user
     user_info = get_current_user_info()
-    self._render(mpath, spath, epath, user_info)
+    self._render(spath, epath, user_info)
 
-  def post(self, mpath, spath='', epath=''):
+  def post(self, spath='', epath=''):
     """Updates a single weight entry."""
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
@@ -134,13 +131,13 @@ class ShowGraph(RequestHandler):
     logging.debug("POST data: %r", self.request.POST)
     if not form.is_valid():
       logging.debug("Invalid form")
-      return self._render(mpath, spath, epath, user_info, form)
+      return self._render(spath, epath, user_info, form)
     else:
       logging.debug("valid form")
       date = form.clean_data['date']
       weight = form.clean_data['weight']
       weight_data.update(date, weight)
-      return self.redirect(ShowGraph.get_url(implicit_args=True))
+      return self.redirect(MobileMainPage.get_url(implicit_args=True))
 
 class CSVFileForm(forms.Form):
   csvdata = CSVWeightField(widget=forms.FileInput)
@@ -163,15 +160,12 @@ class Data(RequestHandler):
       'user': users.get_current_user(),
       'fileform': fileform,
       'textform': textform,
-      # TODO
-      # TODO: show a message when data is successfully updated
-      # TODO
       'success': bool(successful_command),
     }
     path = template_path('data.html')
     return self.response.out.write(template.render(path, template_values))
 
-  def post(self, mpath, command=''):
+  def post(self, command=''):
     if command == 'file':
       # POST a file
       fileform = CSVFileForm(self.request)
@@ -185,7 +179,7 @@ class Data(RequestHandler):
     else:
       # This shouldn't be a 'post': redirect to the main data page
       logging.error("Invalid data command: %r", command)
-      return self.redirect(Data.get_url(implicit_args=(mpath,)), permanent=True)
+      return self.redirect(Data.get_url(), permanent=True)
 
     if not activeform.is_valid():
       return self._render(fileform=fileform,
@@ -204,9 +198,9 @@ class Data(RequestHandler):
         activeform.errors['csvdata'] = e.messages
         return self._render(fileform=fileform,
                             textform=textform)
-      return self.redirect(Data.get_url(implicit_args=True))
+      return self.redirect(Data.get_url())
 
-  def get(self, mpath, command=''):
+  def get(self, command=''):
     return self._render(successful_command=command)
 
 class SettingsForm(forms.Form):
@@ -222,26 +216,25 @@ class SettingsForm(forms.Form):
     label="Decay weight",
   )
 
-class Settings(webapp.RequestHandler):
-  def _render(self, mpath, user_info, form):
+class MobileSettings(webapp.RequestHandler):
+  def _render(self, user_info, form):
     template_values = {
       'user': users.get_current_user(),
       'index_url': '/index',
       'data_url': '/data',
       'form': form,
-      'is_mobile': bool(mpath),
     }
 
     path = template_path('settings.html')
     self.response.out.write(template.render(path, template_values))
 
-  def post(self, mpath):
+  def post(self):
     user_info = get_current_user_info()
     form = SettingsForm(self.request.POST)
     if not form.is_valid():
       # Errors?  Just render the form: the POST didn't do anything, so a
       # refresh would be expected to "retry"
-      return self._render(mpath, user_info, form)
+      return self._render(user_info, form)
     else:
       # No errors, store the data
       user_info.scale_resolution = form.clean_data['scale_resolution']
@@ -249,12 +242,14 @@ class Settings(webapp.RequestHandler):
       user_info.put()
 
       # Send the user to the default front page after settings are altered.
-      return self.redirect(ShowGraph.get_url(implicit_args=True))
+      return self.redirect(MobileMainPage.get_url(implicit_args=True))
 
-  def get(self, mpath):
+  def get(self):
     user_info = get_current_user_info()
-    form = SettingsForm(initial=user_info.__dict__)
-    return self._render(mpath, user_info, form)
+    form = SettingsForm(initial={'gamma': user_info.gamma,
+                                 'scale_resolution': user_info.scale_resolution,
+                                })
+    return self._render(user_info, form)
 
 class CsvDownload(RequestHandler):
   def GET(self, spath='', epath=''):
@@ -281,7 +276,7 @@ class Logout(RequestHandler):
 
 class DefaultRoot(RequestHandler):
   def get(self, mpath):
-    self.redirect(ShowGraph.get_url(mpath))
+    self.redirect(MobileMainPage.get_url(mpath))
 
 def main():
   template.register_template_library('templatestuff')
@@ -293,13 +288,13 @@ def main():
   # arguments are required when they aren't.
   application = webapp.WSGIApplication(
       [
-        ('(/m|)/graph/([^/]+)/([^/]+)', ShowGraph),
-        ('(/m|)/graph/([^/]+)', ShowGraph),
-        ('(/m|)/graph', ShowGraph),
-        ('(/m|)/settings', Settings),
+        ('/m/graph/([^/]+)/([^/]+)', MobileMainPage),
+        ('/m/graph/([^/]+)', MobileMainPage),
+        ('/m/graph', MobileMainPage),
+        ('/m/settings', MobileSettings),
         ('(/m|)/logout', Logout),
-        ('(/m|)/data/([^/]+)', Data),
-        ('(/m|)/data', Data),
+        ('/data/(text|file)', Data),
+        ('/data', Data),
         ('/csv/([^/]+)/([^/]+)', CsvDownload),
         ('/csv/([^/]+)', CsvDownload),
         ('/csv', CsvDownload),

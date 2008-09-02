@@ -7,9 +7,8 @@
   <table><tr><td>
     <p class="small_text">
       {{ user.email }} |
-      <a href="{% url ShowGraph %}">Home</a> |
-      <a href="{% url Data %}">Data</a> |
-      <a href="{% url Settings %}">Settings</a> ||
+      <a href="{% url MobileMainPage %}">Home</a> |
+      <a href="{% url MobileSettings %}">Settings</a> ||
       <a href="{% url Logout %}">Logout</a>
     </p>
     {% block content %}{% endblock %}

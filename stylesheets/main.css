@@ -60,6 +60,12 @@ fieldset {
   font-weight: bold;
 }
 
+.info {
+  color: #000;
+  background-color: #088;
+  font-weight: bold;
+}
+
 .form_table {
   text-align: left;
 }
