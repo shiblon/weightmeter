@@ -1,0 +1,26 @@
+{% extends "base_template.html" %}
+
+{% block content %}
+<form method="POST" action="{% url Graph %}">
+<div class="simple_border medium_text">
+  {% if form.errors %}<div class="error">Correct marked entries below and try again.</div><br>{% endif %}
+  <fieldset>{% for field in form %}<span class="form_label{% if field.errors %} error{% endif %}">{{ field.label_tag }}{% if field.errors %}<span class="error">*</span>{% endif %}: {{ field }} {% endfor %}<input type=submit value="Update"></fieldset>
+</div>
+</form>
+<div class="simple_border chart_image">
+  <div style="width: {{ img.width }}px;">
+    <div class="graph_link_text">
+    {% for duration in durations %}
+    <a class="graph_link" href="{% url Graph %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+    {% endfor %}
+    </div>
+    <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}">
+    <br>
+    <div class="graph_link_text">
+    {% for duration in durations %}
+    <a class="graph_link" href="{% url Graph %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+    {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock content %}

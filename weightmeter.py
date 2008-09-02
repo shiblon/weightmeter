@@ -21,6 +21,18 @@ try:
 except ImportError:
   from django import forms
 
+# TODO
+# - fix non-mobile site and launch version 2.0
+# - implement clearing out of weight data
+# - implement csrf protection
+# - rethink param sanitizers (make them a decorator, perhaps)
+# - add pytz and use it for all references to "today"
+# - make a user_info setting for the default duration
+# - try a restful approach: give every "thing" a URL.  This includes users.
+#   That way, we can have the user listed as part of the url, and can base
+#   everything off of that.  Makes it very simple for an administrator to do
+#   administrative tasks, and also allows for possible sharing in the future.
+
 from datamodel import UserInfo, WeightBlock, WeightData, DEFAULT_QUERY_DAYS
 from datamodel import sample_entries, decaying_average_iter, full_entry_iter
 from graph import chartserver_bounded_size, chartserver_weight_url
@@ -39,12 +51,16 @@ from wsgiutil import ParamSanitizer
 DEFAULT_SELECT_DAYS = 14
 DEFAULT_GRAPH_DURATION = '2w'
 DEFAULT_POUND_SELECTION = 2
+DEFAULT_DURATIONS = ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w')
 
 DEFAULT_ERROR_PATH = '/error'
 DEFAULT_REDIR_PATH = '/index'
 
-MOBILE_IMG_WIDTH = 300
-MOBILE_IMG_HEIGHT = 200
+DEFAULT_MOBILE_GRAPH_WIDTH = 300
+DEFAULT_MOBILE_GRAPH_HEIGHT = 200
+
+DEFAULT_GRAPH_WIDTH = 600
+DEFAULT_GRAPH_HEIGHT = 400
 
 MAX_GRAPH_SAMPLES = 200
 
@@ -60,40 +76,48 @@ class WeightEntryForm(forms.Form):
   date = DateSelectField()
   weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
 
-class MobileGraph(RequestHandler):
+def chart_url(weight_data, width, height, start, end, gamma):
+  cw, ch = chartserver_bounded_size(width, height)
+  samples = min(MAX_GRAPH_SAMPLES, cw // 4)
+  smoothed_iter = weight_data.smoothed_weight_iter(start, end, samples, gamma)
+  return chartserver_weight_url(cw, ch, smoothed_iter)
+
+class Graph(RequestHandler):
+  _default_graph_width = DEFAULT_GRAPH_WIDTH
+  _default_graph_height = DEFAULT_GRAPH_HEIGHT
+
   def _render(self, user_info, form=None):
-    # TODO: Time zone
     today = datetime.date.today()
 
-    start = self.request.get('s', '')
+    start = self.request.get('s', DEFAULT_GRAPH_DURATION)
     end = self.request.get('e', '')
 
-    # TODO: make a user_info setting for the default duration
-    sdate, edate = dates_from_args(start, end, today,
-                                   default_start=DEFAULT_GRAPH_DURATION)
-    weight_data = WeightData(user_info)
+    try:
+      sdate, edate = dates_from_args(start, end, today)
+    except ValueError:
+      # Pass errors silently - just ignore the bad input
+      sdate, edate = dates_from_args(DEFAULT_GRAPH_DURATION, 'today')
 
-    # TODO: rethink this whole param sanitizer thing
     sanitizer = ParamSanitizer(
       self.request,
-      ('w', ParamSanitizer.Integer, MOBILE_IMG_WIDTH),
-      ('h', ParamSanitizer.Integer, MOBILE_IMG_HEIGHT),
+      ('w', ParamSanitizer.Integer, self._default_graph_width),
+      ('h', ParamSanitizer.Integer, self._default_graph_height),
       default_on_error=True)
 
+    weight_data = WeightData(user_info)
     img_width = sanitizer.params['w']
     img_height = sanitizer.params['h']
-    chart_width, chart_height = chartserver_bounded_size(img_width, img_height)
-    samples = min(MAX_GRAPH_SAMPLES, chart_width // 4)
 
-    smoothed_iter = weight_data.smoothed_weight_iter(sdate,
-                                                     edate,
-                                                     samples,
-                                                     gamma=user_info.gamma)
     # Make a chart
     img = {
         'width': img_width,
         'height': img_height,
-        'url': chartserver_weight_url(chart_width, chart_height, smoothed_iter),
+        'url': chart_url(weight_data,
+                         img_width,
+                         img_height,
+                         sdate,
+                         edate,
+                         user_info.gamma)
         }
     logging.debug("Graph Chart URL: %s", img['url'])
 
@@ -109,11 +133,17 @@ class MobileGraph(RequestHandler):
         'img': img,
         'user': users.get_current_user(),
         'form': form,
-        'durations': ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w'),
+        'durations': DEFAULT_DURATIONS,
         }
 
-    path = template_path('mobile_index.html')
+    path = self._template_path()
     return self.response.out.write(template.render(path, template_values))
+
+  def _template_path(self):
+    return template_path('graph.html')
+
+  def _on_success(self):
+    return self.redirect(Graph.get_url())
 
   def get(self):
     # Get the settings and info for this user
@@ -135,11 +165,17 @@ class MobileGraph(RequestHandler):
       date = form.clean_data['date']
       weight = form.clean_data['weight']
       weight_data.update(date, weight)
-      return self.redirect(MobileGraph.get_url(implicit_args=True))
+      return self._on_success()
 
-class Graph(RequestHandler):
-  def get(self):
-    return self.response.out.write("Main page")
+class MobileGraph(Graph):
+  _default_graph_width = DEFAULT_MOBILE_GRAPH_WIDTH
+  _default_graph_height = DEFAULT_MOBILE_GRAPH_HEIGHT
+
+  def _template_path(self):
+    return template_path('mobile_index.html')
+
+  def _on_success(self):
+    return self.redirect(MobileGraph.get_url())
 
 class CSVFileForm(forms.Form):
   csvdata = CSVWeightField(widget=forms.FileInput)
@@ -152,13 +188,10 @@ class CSVTextForm(forms.Form):
 
 class MobileData(RequestHandler):
   def get(self):
-    # TODO: Time zone
     today = datetime.date.today()
-    # TODO: make a user_info setting for the default duration
-    start = self.request.get('s', '')
+    start = self.request.get('s', DEFAULT_GRAPH_DURATION)
     end = self.request.get('e', '')
-    sdate, edate = dates_from_args(start, end, today,
-                                   default_start=DEFAULT_GRAPH_DURATION)
+    sdate, edate = dates_from_args(start, end, today)
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
     smoothed_iter = weight_data.smoothed_weight_iter(sdate,
@@ -168,47 +201,57 @@ class MobileData(RequestHandler):
       'user': users.get_current_user(),
       'user_info': user_info,
       'entries': list(smoothed_iter),
-      'durations': ('All', '1y', '6m', '3m', '2m', '1m', '2w', '1w'),
+      'durations': DEFAULT_DURATIONS,
     }
     path = template_path('mobile_data.html')
     return self.response.out.write(template.render(path, template_values))
 
 class Data(RequestHandler):
   def _render(self, fileform=None, textform=None, successful_command=None):
-    logging.debug("Data url: %r" % Data.get_url(implicit_args=True))
     if fileform is None:
       fileform = CSVFileForm()
     if textform is None:
       textform = CSVTextForm()
 
+    today = datetime.date.today()
+    start = self.request.get('s', DEFAULT_GRAPH_DURATION)
+    end = self.request.get('e', '')
+    sdate, edate = dates_from_args(start, end, today)
+    user_info = get_current_user_info()
+    weight_data = WeightData(user_info)
+    smoothed_iter = weight_data.smoothed_weight_iter(sdate,
+                                                     edate,
+                                                     gamma=user_info.gamma)
     template_values = {
       'user': users.get_current_user(),
       'fileform': fileform,
       'textform': textform,
       'success': bool(successful_command),
+      'entries': list(smoothed_iter),
+      'durations': DEFAULT_DURATIONS,
     }
     path = template_path('data.html')
     return self.response.out.write(template.render(path, template_values))
 
-  def post(self, command=''):
-    if command == 'file':
+  def _add(self):
+    submit_type = self.request.get('type')
+    if submit_type == 'file':
       # POST a file
       fileform = CSVFileForm(self.request)
       textform = CSVTextForm()  # for template output
       activeform = fileform
-    elif command == 'text':
+    elif submit_type == 'text':
       # POST a textarea
       fileform = CSVFileForm()  # for template output
       textform = CSVTextForm(self.request)
       activeform = textform
     else:
-      # This shouldn't be a 'post': redirect to the main data page
-      logging.error("Invalid data command: %r", command)
-      return self.redirect(Data.get_url(), permanent=True)
+      # Unknown data type: fail silently (mucking about with the form, eh?)
+      logging.error("Invalid data submit type: %r", submit_type)
+      return self.redirect(Data.get_url())
 
     if not activeform.is_valid():
-      return self._render(fileform=fileform,
-                          textform=textform)
+      return self._render(fileform=fileform, textform=textform)
     else:
       # Cleaned data is a date,weight pair iterator
       user_info = get_current_user_info()
@@ -221,12 +264,26 @@ class Data(RequestHandler):
           raise forms.ValidationError("No valid entries specified")
       except forms.ValidationError, e:
         activeform.errors['csvdata'] = e.messages
-        return self._render(fileform=fileform,
-                            textform=textform)
+        return self._render(fileform=fileform, textform=textform)
+    return self.redirect(Data.get_url())
+
+  def _delete(self):
+    # TODO: implement deletion of all data
+    return self.redirect(Data.get_url())
+
+  def post(self):
+    cmd = self.request.get('cmd')
+    if cmd == 'add':
+      return self._add()
+    elif cmd == 'delete':
+      return self._delete()
+    else:
+      # fail silently - you can only get here by mucking about with urls
+      logging.error("Invalid post command: %r", cmd)
       return self.redirect(Data.get_url())
 
-  def get(self, command=''):
-    return self._render(successful_command=command)
+  def get(self):
+    return self._render()
 
 class SettingsForm(forms.Form):
   scale_resolution = FloatChoiceField(
@@ -250,8 +307,14 @@ class MobileSettings(webapp.RequestHandler):
       'form': form,
     }
 
-    path = template_path('mobile_settings.html')
+    path = self._template_path()
     self.response.out.write(template.render(path, template_values))
+
+  def _template_path(self):
+    return template_path('mobile_settings.html')
+
+  def _on_success(self):
+    return self.redirect(MobileGraph.get_url())
 
   def post(self):
     user_info = get_current_user_info()
@@ -267,7 +330,7 @@ class MobileSettings(webapp.RequestHandler):
       user_info.put()
 
       # Send the user to the default front page after settings are altered.
-      return self.redirect(MobileGraph.get_url(implicit_args=True))
+      return self._on_success()
 
   def get(self):
     user_info = get_current_user_info()
@@ -276,13 +339,23 @@ class MobileSettings(webapp.RequestHandler):
                                 })
     return self._render(user_info, form)
 
+class Settings(MobileSettings):
+  def _template_path(self):
+    return template_path('settings.html')
+
+  def _on_success(self):
+    return self.redirect(Graph.get_url())
+
 class CsvDownload(RequestHandler):
-  def get(self, start='', end=''):
+  def get(self):
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
 
     today = datetime.date.today()
-    sdate, edate = dates_from_args(start, end, today, default_start='all')
+
+    start = self.request.get('s', 'all')
+    end = self.request.get('e', '')
+    sdate, edate = dates_from_args(start, end, today)
 
     self.response.headers['Content-Type'] = 'application/octet-stream'
     self.response.headers.add_header('Content-Disposition',
@@ -298,6 +371,8 @@ class CsvDownload(RequestHandler):
 class Logout(RequestHandler):
   def get(self):
     self.redirect(users.create_logout_url())
+
+class MobileLogout(Logout): pass
 
 class MobileDefaultRoot(RequestHandler):
   def get(self):
@@ -320,19 +395,13 @@ def main():
         ('/m/graph', MobileGraph),
         ('/m/data', MobileData),
         ('/m/settings', MobileSettings),
-        ('/m/logout', Logout),
+        ('/m/logout', MobileLogout),
         ('/m/?', MobileDefaultRoot),
-        ('/graph/([^/]+)/([^/]+)/?', Graph),
-        ('/graph/([^/]+)/?', Graph),
-        ('/graph/?', Graph),
-        # TODO: implement clearing of weight data
-        # TODO: implement csrf protection
-        ('/data/(text|file)', Data),
-        ('/data/?', Data),
-        ('/csv/([^/]+)/([^/]+)/?', CsvDownload),
-        ('/csv/([^/]+)/?', CsvDownload),
-        ('/csv/?', CsvDownload),
-        ('/logout/?', Logout),
+        ('/graph', Graph),
+        ('/data', Data),
+        ('/csv', CsvDownload),
+        ('/settings', Settings),
+        ('/logout', Logout),
         ('/?', DefaultRoot),
         # TODO: add a default handler - 404
       ],

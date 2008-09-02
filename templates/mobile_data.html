@@ -3,27 +3,25 @@
 {% block title %}Weight Meter Data{% endblock title %}
 
 {% block content %}
-<div class="graph_link_text">
+<div class="graph_link_text simple_border">
 {% for duration in durations %}
 <a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
 {% endfor %}
 </div>
-<br>
-<table class="medium_text" border="1" cellspacing="1" cellpadding="1" width="100%">
+<table class="small_text" border="0" cellspacing="0" cellpadding="1">
 <th>
-  <td>Weight</td>
-  <td>Smoothed</td>
+  <td style="font-weight: bold">Scale</td>
+  <td style="font-weight: bold">Trend</td>
 </th>
 {% for entry in entries %}
 <tr>
-  <td>{{ entry.0 }}</td>
-  <td>{{ entry.1 }}</td>
-  <td>{{ entry.2 }}</td>
+  <td style="padding-right: 2em">{{ entry.0 }}</td>
+  <td style="padding-right: 2em">{{ entry.1|floatformat:2 }}</td>
+  <td>{{ entry.2|floatformat:2 }}</td>
 </tr>
 {% endfor %}
 </table>
-<br>
-<div class="graph_link_text">
+<div class="graph_link_text simple_border">
 {% for duration in durations %}
 <a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
 {% endfor %}

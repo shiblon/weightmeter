@@ -329,13 +329,12 @@ def try_to_parse_absolute_date(datestr):
   else:
     return None
 
-def dates_from_args(start, end=None, today=None, default_start='2w'):
+def dates_from_args(start, end=None, today=None):
   """
   Params:
     start - start date path component
     end - end date path component
     today - datetime (or date) object representing today
-    default_start - default start value if no start is specified.
 
   Returns:
     (start_date, end_date): datetime.date objects
@@ -387,17 +386,17 @@ def dates_from_args(start, end=None, today=None, default_start='2w'):
 
   >>> import datetime
   >>> today = datetime.datetime(2008, 8, 31)
-  >>> dates_from_path('/2008-08-04', '/2008-08-11')
+  >>> dates_from_args('/2008-08-04', '/2008-08-11')
   (datetime.date(2008, 8, 4), datetime.date(2008, 8, 11))
 
-  >>> dates_from_path('4w', None, today)
+  >>> dates_from_args('4w', None, today)
   (datetime.date(2008, 8, 3), datetime.date(2008, 8, 31))
 
-  >>> dates_from_path('4m', '2m', today)
+  >>> dates_from_args('4m', '2m', today)
   (datetime.date(2008, 4, 30), datetime.date(2008, 6, 30))
   """
   if not start:
-    start = default_start
+    raise ValueError("Missing start date - can't create range")
   if not end:
     end = 'today'
   if today is None:

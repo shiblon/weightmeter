@@ -1,41 +1,79 @@
-{% extends "mobile_base_template.html" %}
+{% extends "base_template.html" %}
 
 {% block title %}Weight Meter Data{% endblock title %}
 
 {% block content %}
-{% if success %}
-<div class="medium_text centered info">
-Data updated
-</div>
-{% endif %}
-    <div class="small_text">
-    <p class="simple_border">
-      Export weight entries to <a href="{% url CsvDownload %}">CSV</a>
+<table width="100%" style="margin: 10px">
+<tr>
+<td style="vertical-align: top">
+  <div class="graph_link_text simple_border">
+  {% for duration in durations %}
+  <a class="graph_link" href="{% url Data %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+  {% endfor %}
+  </div>
+  <table class="medium_text" border="0" cellspacing="0" cellpadding="1">
+  {% if entries %}
+  <th>
+    <td style="font-weight: bold">Scale</td>
+    <td style="font-weight: bold">Trend</td>
+  </th>
+  {% for entry in entries %}
+  <tr>
+    <td style="padding-right: 2em">{{ entry.0 }}</td>
+    <td style="padding-right: 2em">{{ entry.1|floatformat:2 }}</td>
+    <td>{{ entry.2|floatformat:2 }}</td>
+  </tr>
+  {% endfor %}
+  {% else %}
+  <tr>
+    <td>No entries</td>
+  </tr>
+  {% endif %}
+  </table>
+  <div class="graph_link_text simple_border">
+  {% for duration in durations %}
+  <a class="graph_link" href="{% url Data %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+  {% endfor %}
+  </div>
+</td>
+<td style="padding: 10px">
+</td>
+<td style="vertical-align: top" class="medium_text">
+  <div class="simple_border">
+    Export weight entries to <a href="{% url CsvDownload %}">CSV</a>
+  </div>
+  <p/>
+  <form action="{% url Data %}?cmd=add&type=file" method="POST" enctype="multipart/form-data" class="simple_border">
+    Import a CSV file of weight entries, e.g.,
+    <pre>
+    2008-04-01,192.5
+    2008-04-02,193.0
+    ...</pre>
+    <p class="small_text">
+    Dates can be YYYY-MM-DD or MM/DD/YYYY<br>
+    Values can be separated by commas, spaces, or tabs<br>
+    Weights of '-' or '_' signify that a value should be deleted<br>
     </p>
-    <form action="{% url Data "file" %}" method="POST" enctype="multipart/form-data" class="simple_border">
-      Import a CSV file of weight entries, e.g.,
-      <pre>
-      2008-04-01,192.5
-      2008-04-02,193.0
-      ...</pre>
-      <p class="small_text">
-      Dates can be YYYY-MM-DD or MM/DD/YYYY<br>
-      Values can be separated by commas, spaces, or tabs<br>
-      </p>
-      {% for error in fileform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
-      {{ fileform.csvdata }}
-      <input type="submit" value="Submit">
-    </form>
-    <p/>
-    <form action="{% url Data "text" %}" method="POST" class="simple_border">
-      Cut and paste CSV entries<br>
-      {% for error in textform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
-      {{ textform.csvdata }}
-      <input type="submit" value="Submit">
-    </form>
-    <p/>
-    <form action="/data/clear" method="POST" class="simple_border">
-      Clear all entries: <input type="submit" value="Yes, wipe out all of my history">
-    </form>
-    </div>
+    {% for error in fileform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
+    {{ fileform.csvdata }}
+    <input type="submit" value="Submit">
+  </form>
+  <p/>
+  <form action="{% url Data %}?cmd=add&type=text" method="POST" class="simple_border">
+    Cut and paste CSV entries<br>
+    {% for error in textform.csvdata.errors %}<p class="error">Error: {{ error }}</p>{% endfor %}
+    {{ textform.csvdata }}
+    <input type="submit" value="Submit">
+  </form>
+  <p/>
+  {# hide the form for now - the functionality doesn't exist #}
+  {% if False %}
+  <form action="{% url Data %}?cmd=delete" method="POST" class="simple_border">
+    Clear all entries: <input type="submit" value="Yes, wipe out all of my history">
+  </form>
+  {% endif %}
+  </div>
+</td>
+</tr>
+</table>
 {% endblock content %}

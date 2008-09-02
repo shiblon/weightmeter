@@ -10,13 +10,13 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-# Used 161 times in query history.
+# Used 278 times in query history.
 - kind: WeightBlock
   properties:
   - name: user_info
   - name: day_zero
 
-# Used 53 times in query history.
+# Used 32 times in query history.
 - kind: WeightBlock
   properties:
   - name: user_info

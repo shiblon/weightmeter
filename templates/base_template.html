@@ -4,24 +4,23 @@
     <link rel="stylesheet" href="/stylesheets/main.css">
   </head>
   <body>
-  <table><tr><td>
-    <p class="small_text">
+    <div class="medium_text">
       {{ user.email }} |
-      <a href="{% url MobileGraph %}">Home</a> |
-      <a href="{% url MobileData %}">Data</a> |
-      <a href="{% url MobileSettings %}">Settings</a> ||
-      <a href="{% url MobileLogout %}">Logout</a>
-    </p>
+      <a href="{% url Graph %}">Home</a> |
+      <a href="{% url Data %}">Data</a> |
+      <a href="{% url Settings %}">Settings</a> ||
+      <a href="{% url Logout %}">Logout</a>
+    </div>
+    <p/>
     {% block content %}{% endblock %}
     <p/>
     {% block bottom_credits %}
-    <div class="small_text centered">
+    <div class="medium_text centered">
       An
       <a href="http://weightmeter.googlecode.com/">open source</a>
       <a href="http://appengine.google.com/">Google AppEngine</a>
       project by Chris Monson
     </div>
     {% endblock bottom_credits %}
-  </td></tr></table>
   </body>
 </html>
