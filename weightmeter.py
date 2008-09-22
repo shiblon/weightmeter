@@ -38,7 +38,8 @@ from datamodel import sample_entries, decaying_average_iter, full_entry_iter
 from graph import chartserver_bounded_size, chartserver_weight_url
 from urlparse import urlparse, urlunparse
 from util.dates import DateDelta, dates_from_args
-from util.forms import FloatChoiceField
+from util.forms import FloatSelectField
+from util.forms import FloatRangeSelectField
 from util.forms import FloatField
 from util.forms import DateSelectField
 from util.forms import CSVWeightField
@@ -87,6 +88,10 @@ def chart_url(weight_data, width, height, start, end, gamma):
 # Forms
 ##############################################################################
 
+class WeightChoiceForm(forms.Form):
+  date = DateSelectField()
+  weight = FloatRangeSelectField(reversed=True)
+
 class WeightEntryForm(forms.Form):
   date = DateSelectField()
   weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
@@ -101,12 +106,12 @@ class CSVTextForm(forms.Form):
                                                  }))
 
 class SettingsForm(forms.Form):
-  scale_resolution = FloatChoiceField(
+  scale_resolution = FloatSelectField(
     initial=.5,
     floatfmt='%0.02f',
     float_choices=[.1, .2, .25, .5, 1.],
   )
-  gamma = FloatChoiceField(
+  gamma = FloatSelectField(
     initial=.9,
     floatfmt='%0.02f',
     float_choices=(.7, .75, .8, .85, .9, .95, 1.),
@@ -119,6 +124,17 @@ class SettingsForm(forms.Form):
 class Graph(RequestHandler):
   _default_graph_width = DEFAULT_GRAPH_WIDTH
   _default_graph_height = DEFAULT_GRAPH_HEIGHT
+  _default_form_style = 'text'
+
+  def _form_style(self):
+    return self.request.get('fs', self._default_form_style)
+
+  def _alternate_form_style(self):
+    fs = self._form_style()
+    if fs == 'list':
+      return 'text'
+    else:
+      return 'list'
 
   def _render(self, user_info, form=None):
     today = datetime.date.today()
@@ -160,7 +176,10 @@ class Graph(RequestHandler):
     if recent_entry:
       recent_weight = recent_entry[1]
     if form is None:
-      form = WeightEntryForm(initial={'weight': recent_weight, 'date': today})
+      form = self._make_weight_form(initial={'weight': recent_weight,
+                                             'date': today})
+
+    afs = self._alternate_form_style()
 
     # Output to the template
     template_values = {
@@ -168,6 +187,10 @@ class Graph(RequestHandler):
         'user': users.get_current_user(),
         'form': form,
         'durations': DEFAULT_DURATIONS,
+        'alternate_form_style': {
+          'url': "%s?fs=%s" % (self.__class__.get_url(), afs),
+          'name': afs,
+          },
         XSRF_TOKEN_NAME: self._xsrf_token,
         }
 
@@ -179,6 +202,22 @@ class Graph(RequestHandler):
 
   def _on_success(self):
     return self.redirect(Graph.get_url())
+
+  def _make_weight_form(self, *args, **kargs):
+    form_style = self._form_style()
+    if form_style == 'list':
+      form = WeightChoiceForm(*args, **kargs)
+      # Fill in the appropriate choice field parameters from user info
+      user_info = kargs.get('user_info')
+      if not user_info:
+        user_info = get_current_user_info()
+      form.fields['weight'].resolution = user_info.scale_resolution
+    elif form_style == 'text':
+      form = WeightEntryForm(*args, **kargs)
+    else:
+      raise ValueError("Invalid form style specified: %s" % form_style)
+
+    return form
 
   @xsrf_aware('update_weight', get_current_user_info)
   def get(self):
@@ -192,7 +231,7 @@ class Graph(RequestHandler):
     user_info = get_current_user_info()
     weight_data = WeightData(user_info)
 
-    form = WeightEntryForm(self.request.POST)
+    form = self._make_weight_form(self.request.POST)
     logging.debug("POST data: %r", self.request.POST)
     if not form.is_valid():
       logging.debug("Invalid form")
@@ -207,6 +246,7 @@ class Graph(RequestHandler):
 class MobileGraph(Graph):
   _default_graph_width = DEFAULT_MOBILE_GRAPH_WIDTH
   _default_graph_height = DEFAULT_MOBILE_GRAPH_HEIGHT
+  _default_form_style = 'list'
 
   def _template_path(self):
     return template_path('mobile_index.html')

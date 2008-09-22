@@ -78,7 +78,6 @@ class xsrf_aware(object):
           raise ValueError("Failed to find XSRF token in form")
 
         h, t = parse_xsrf_token(token)
-        logging.debug("h: %s, t: %s", h, t)
         cur_time = int(time.time() * 1e6)
 
         if cur_time - self.expire_micros > t:

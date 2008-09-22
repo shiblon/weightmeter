@@ -19,6 +19,64 @@ class FloatSelect(forms.Select):
     logging.debug("float select value: %r=%r", name, value)
     return super(FloatSelect, self).render(name, value, *args, **kargs)
 
+class FloatRangeSelect(forms.Select):
+  def __init__(self, min_delta=5.0, max_delta=5.0, resolution=0.5,
+               default_mid=95.0, reversed=False,
+               dispfmt="%0.1f", labelfmt="%0.1f", attrs=None):
+    self.min_delta = min_delta
+    self.max_delta = max_delta
+    self.resolution = resolution
+    self.dispfmt = dispfmt
+    self.labelfmt = labelfmt
+    self.default_mid = default_mid
+    self.reversed = reversed
+    super(FloatRangeSelect, self).__init__(attrs)
+
+  def render(self, name, value=None, attrs=None):
+    # Construct the choices list on the fly.  "Value" is the current selection,
+    # and the range will be constructed around it..
+    if value is None:
+      value = self.default_mid
+    elif isinstance(value, basestring):
+      value = float(value)
+
+    # Construct choices of the given resolution and delta on either side of
+    # value.
+    choices = []
+    v = value
+    while v >= value - self.min_delta:
+      choices.append((self.labelfmt % v, self.dispfmt % v))
+      v -= self.resolution
+    choices.reverse()
+    v = value + self.resolution
+    while v <= value + self.max_delta:
+      choices.append((self.labelfmt % v, self.dispfmt % v))
+      v += self.resolution
+    if self.reversed:
+      choices.reverse()
+
+    return super(FloatRangeSelect, self).render(name, value, attrs, choices)
+
+class FloatRangeSelectField(forms.ChoiceField):
+  def __init__(self, min_delta=5.0, max_delta=5.0, resolution=0.5,
+               default_mid=95.0, reversed=False,
+               dispfmt="%0.1f", labelfmt="%0.1f",
+               *args, **kargs):
+    """Creates a ChoiceField, but makes it easier to specify float lists
+    centered on a previously chosen value.
+    """
+    super(FloatRangeSelectField, self).__init__(
+      widget=FloatRangeSelect(min_delta, max_delta, resolution, default_mid,
+                              reversed, dispfmt, labelfmt, kargs.get('attrs')),
+      *args, **kargs)
+
+  def clean(self, value):
+    # Try to convert it to a float
+    try:
+      return float(value)
+    except ValueError:
+      raise forms.ValidationError("Ensure this is a floating point number")
+
 class DateSelect(forms.Select):
   def __init__(self, num_days=14, dispfmt="%a, %b %d",
                labelfmt="%Y-%m-%d", attrs=None):
@@ -49,8 +107,7 @@ class DateSelectField(forms.DateField):
                                           widget=DateSelect(num_days=num_days,
                                                             dispfmt=dispfmt,
                                                             labelfmt=labelfmt),
-                                          *args,
-                                          **kargs)
+                                          *args, **kargs)
 
 class FloatField(forms.CharField):
   def __init__(self, floatfmt="%0.02f", max_length=None, min_length=None,
@@ -70,7 +127,7 @@ class FloatField(forms.CharField):
     except ValueError:
       raise forms.ValidationError("Ensure this is a floating point number")
 
-class FloatChoiceField(forms.ChoiceField):
+class FloatSelectField(forms.ChoiceField):
   def __init__(self, floatfmt='%0.01f', float_choices=(), choices=(),
                required=True, widget=None, label=None,
                initial=None, help_text=None):
@@ -88,7 +145,7 @@ class FloatChoiceField(forms.ChoiceField):
     if float_choices and not choices:
       fc = (float(x) for x in float_choices)
       choices = [(floatfmt % c, floatfmt % c) for c in fc]
-    super(FloatChoiceField, self).__init__(choices, required, widget,
+    super(FloatSelectField, self).__init__(choices, required, widget,
                                            label, initial, help_text)
     self.floatfmt = floatfmt
     self.float_choices = fc
@@ -99,7 +156,7 @@ class FloatChoiceField(forms.ChoiceField):
       choice_value = self.floatfmt % float(value)
     except ValueError:
       raise forms.ValidationError("Ensure this is a floating point number")
-    return float(super(FloatChoiceField, self).clean(choice_value))
+    return float(super(FloatSelectField, self).clean(choice_value))
 
 class CSVWeightField(forms.Field):
   widget = forms.FileInput

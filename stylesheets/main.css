@@ -7,15 +7,11 @@ body {
   margin-right: 1em;
 }
 
-label {
-  font-size: 0.75em;
-}
-
 .graph_link_text {
   color: #aaa;
   width: 100%;
   text-align: center;
-  font-size: 7pt;
+  font-size: 8pt;
 }
 
 .selected_link {
@@ -45,6 +41,10 @@ fieldset {
 
 .medium_text {
   font-size: 9pt;
+}
+
+.label_text {
+  font-size: 0.8em;
 }
 
 .centered {
