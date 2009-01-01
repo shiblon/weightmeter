@@ -12,9 +12,10 @@ def chartserver_simple_encode(values, mn=None, mx=None):
   if mx is None:
     mx = max(values)
 
-  rng = mx - mn
-  if rng <= 0.01:
+  if mx <= mn:
     return ''
+
+  rng = mx - mn
 
   enc = []
   for v in values:
@@ -35,13 +36,14 @@ def chartserver_extended_encode(values, mn=None, mx=None):
   if mx is None:
     mx = max(values)
 
-  rng = mx - mn
-  if rng <= 0.01:
+  if mx <= mn:
     return ''
+
+  rng = mx - mn
 
   enc = []
   for v in values:
-    if v is None:
+    if v is None or not (mn <= v <= mx):
       enc.append('__')
     else:
       quantized = int((N - 1) * (v - mn) / rng)
@@ -63,7 +65,7 @@ def chartserver_text_encode(values, mn=None, mx=None):
   enc = []
   rng = mx - mn
   for v in values:
-    if v is None:
+    if v is None or not (mn <= v <= mx):
       enc.append('-1')
     else:
       scaled = N * (v - mn) / rng
@@ -104,7 +106,7 @@ def date_labels(dates):
 
   return [d.strftime(format) for d in dates]
 
-def chartserver_data_params(entries, width, height):
+def chartserver_data_params(entries, width, height, showindex=None):
   """Create chartserver url data parameters
 
   If you want to limit the number of samples received, you must sample *before*
@@ -121,20 +123,24 @@ def chartserver_data_params(entries, width, height):
         plotted.  The number of lines on the plot will be equal to columns - 1
     width: actual chartserver image width in pixels
     height: actual chartserver image height in pixels
+    showindex: if specified, goes into the format specifier (e.g. t: becomes
+      t1:) - see charts api docs for details
 
   Returns:
     A list of chartserver url parameters (what will be separated by & in the
     final URL)
 
   """
-  params = []
-
   data = list(entries)
   if not data:
-    return params
+    return []
 
   earliest = min(x[0] for x in data)
   latest = max(x[0] for x in data)
+
+  typeindex = ''
+  if showindex is not None:
+    typeindex = str(showindex)
   
   # min and max are usually pretty easy to calculate, but in this case it is a
   # little harder since we can have None values sprinkled throughout the whole
@@ -154,7 +160,7 @@ def chartserver_data_params(entries, width, height):
         mn = min(mn, *non_none)
 
   if mn is None or mx is None:
-    return params
+    return []
 
   if mn == mx:
     mn = mn - 0.1
@@ -176,21 +182,21 @@ def chartserver_data_params(entries, width, height):
     e = []
     for i in range(1, num_columns):
       e.append(chartserver_simple_encode([x[i] for x in data], mn=mn, mx=mx))
-    data_param += "s:" + ",".join(e)
+    data_param += "s%s:%s" % (typeindex, ",".join(e))
   elif max_unique_values <= 4096:
     # We can use extended encoding
     e = []
     for i in range(1, num_columns):
       e.append(chartserver_extended_encode([x[i] for x in data], mn=mn, mx=mx))
-    data_param += "e:" + ",".join(e)
+    data_param += "e%s:%s" % (typeindex, ",".join(e))
   else:
     # We have to use text encoding
     e = []
     for i in range(1, num_columns):
       e.append(chartserver_text_encode([x[i] for x in data], mn=mn, mx=mx))
-    data_param += "t:" + "|".join(e)
+    data_param += "t%s:%s" % (typeindex, "|".join(e))
 
-  params.append(data_param)
+  params = [data_param]
 
   # Axis label types: one x, one y
   params.append("chxt=x,y")
@@ -227,16 +233,29 @@ def chartserver_bounded_size(width, height):
   return width, height
 
 def chartserver_weight_url(width, height, smoothed_iter):
+  """Create a URL for a weight graph from an iterator over weight/smoothed
+  pairs.
+  
+  Args:
+    width: chart width in pixels
+    height: chart height in pixels
+    smoothed_iter: iterator over raw,smoothed weight pairs
+  """
   logging.debug("w=%d h=%d", width, height)
   params = [
       "chs=%dx%d" % (width, height),
       "cht=lc",
-      "chm=D,ccddff,1,0,6|D,4488ff,0,0,2|d,4488ff,0,-1,6",
+      "chm=F,,0,-1,6",
       ]
+  # The smoothed_iter pairs are reversed so that the smooth line is first.
+  # This means that the raw dataset will be repeated three times, which is what
+  # we want for financial markers to do the right thing.
   params.extend(
       chartserver_data_params(
-        smoothed_iter,
+        ((date, smooth,
+          raw, raw, raw) for date, raw, smooth in smoothed_iter),
         width=width,
-        height=height)
+        height=height,
+        showindex=1)
       )
   return "http://chart.apis.google.com/chart?" + "&".join(params)
