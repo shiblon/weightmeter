@@ -245,7 +245,7 @@ def chartserver_weight_url(width, height, smoothed_iter):
   params = [
       "chs=%dx%d" % (width, height),
       "cht=lc",
-      "chm=F,,0,-1,6",
+      "chm=F,4488ff,0,-1,3|D,ccddff,0,0,3",
       ]
   # The smoothed_iter pairs are reversed so that the smooth line is first.
   # This means that the raw dataset will be repeated three times, which is what
