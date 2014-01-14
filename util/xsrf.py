@@ -38,7 +38,8 @@ def make_xsrf_token(user_info, action, microseconds=None):
     user_info.xsrf_secret = make_secret()
     user_info.put()
 
-  h = hmac.new(user_info.xsrf_secret, interior, hashlib.sha1).digest()
+  h = hmac.new(user_info.xsrf_secret.encode('ascii'),
+               interior, hashlib.sha1).digest()
   h = base64.b64encode(h)
   return base64.b64encode("%s%s%s" % (h, _DELIM, microseconds))
 
