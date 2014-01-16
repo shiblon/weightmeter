@@ -242,8 +242,8 @@ class Graph(RequestHandler):
       return self._render(user_info, form)
     else:
       logging.debug("valid form")
-      date = form.clean_data['date']
-      weight = form.clean_data['weight']
+      date = form.cleaned_data['date']
+      weight = form.cleaned_data['weight']
       weight_data.update(date, weight)
       return self._on_success()
 
@@ -330,7 +330,7 @@ class Data(RequestHandler):
       user_info = get_current_user_info()
       weight_data = WeightData(user_info)
       try:
-        entries = list(activeform.clean_data['csvdata'])
+        entries = list(activeform.cleaned_data['csvdata'])
         if entries:
           weight_data.batch_update(entries)
         else:
@@ -389,8 +389,8 @@ class MobileSettings(webapp2.RequestHandler):
       return self._render(user_info, form)
     else:
       # No errors, store the data
-      user_info.scale_resolution = form.clean_data['scale_resolution']
-      user_info.gamma = form.clean_data['gamma']
+      user_info.scale_resolution = form.cleaned_data['scale_resolution']
+      user_info.gamma = form.cleaned_data['gamma']
       user_info.put()
 
       # Send the user to the default front page after settings are altered.
