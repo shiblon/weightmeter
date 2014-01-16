@@ -7,10 +7,10 @@
   <table class="main_table"><tr><td>
     <p class="small_text">
       {{ user.email }} |
-      <a href="{% url MobileGraph %}">Home</a> |
-      <a href="{% url MobileData %}">Data</a> |
-      <a href="{% url MobileSettings %}">Settings</a> ||
-      <a href="{% url MobileLogout %}">Logout</a>
+      <a href="/m/graph">Home</a> |
+      <a href="/m/data">Data</a> |
+      <a href="/m/settings">Settings</a> ||
+      <a href="/m/logout">Logout</a>
     </p>
     {% block content %}{% endblock %}
     <p/>
@@ -22,7 +22,7 @@
       project by Chris Monson
     </div>
     <div class="small_text centered">
-      View: <a href="{% url DefaultRoot %}">Normal</a> | <b>Mobile</b>
+      View: <a href="/">Normal</a> | <b>Mobile</b>
     </div>
     {% endblock bottom_credits %}
   </td></tr></table>

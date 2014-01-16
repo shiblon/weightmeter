@@ -1,7 +1,8 @@
-application: weightmeter
+application: weightmeter-hrd
 version: 3
-runtime: python
+runtime: python27
 api_version: 1
+threadsafe: no
 
 handlers:
 - url: /stylesheets
@@ -16,3 +17,10 @@ handlers:
 - url: /.*
   script: weightmeter.py
   login: required
+
+libraries:
+- name: django
+  version: "1.2"
+
+env_variables:
+  DJANGO_SETTINGS_MODULE: 'settings'

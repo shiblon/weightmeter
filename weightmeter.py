@@ -4,15 +4,16 @@ import csv
 import datetime
 import logging
 import math
+import os
 import os.path
 import re
+import webapp2
 import wsgiref.handlers
 
 from StringIO import StringIO
 
 from google.appengine.api import users
-from google.appengine.ext import webapp, db
-from google.appengine.ext.webapp import template
+from google.appengine.ext import db
 
 # This has to come after the appengine includes, otherwise the appropriate
 # environment is not yet set up for Django and it barfs.
@@ -21,10 +22,12 @@ try:
 except ImportError:
   from django import forms
 
+from django.template import Context
+from django.template import loader
+
 # TODO
 # - fix non-mobile site and launch version 2.0
 # - implement clearing out of weight data
-# - implement csrf protection
 # - rethink param sanitizers (make them a decorator, perhaps)
 # - add pytz and use it for all references to "today"
 # - make a user_info setting for the default duration
@@ -71,7 +74,8 @@ MAX_GRAPH_SAMPLES = 200
 # Functions
 ##############################################################################
 def template_path(name):
-  return os.path.join(os.path.dirname(__file__), 'templates', name)
+  return name
+  #return os.path.join(os.path.dirname(__file__), 'templates', name)
 
 def get_current_user_info():
   user = users.get_current_user()
@@ -182,26 +186,26 @@ class Graph(RequestHandler):
     afs = self._alternate_form_style()
 
     # Output to the template
-    template_values = {
+    template_values = Context({
         'img': img,
         'user': users.get_current_user(),
         'form': form,
         'durations': DEFAULT_DURATIONS,
         'alternate_form_style': {
-          'url': "%s?fs=%s" % (self.__class__.get_url(), afs),
+          'url': "/graph?fs=%s" % (afs,),
           'name': afs,
           },
         XSRF_TOKEN_NAME: self._xsrf_token,
-        }
+        })
 
-    path = self._template_path()
-    return self.response.out.write(template.render(path, template_values))
+    t = loader.get_template(self._template_path())
+    return self.response.write(str(t.render(template_values)))
 
   def _template_path(self):
     return template_path('graph.html')
 
   def _on_success(self):
-    return self.redirect(Graph.get_url())
+    return self.redirect("/graph")
 
   def _make_weight_form(self, *args, **kargs):
     form_style = self._form_style()
@@ -252,7 +256,7 @@ class MobileGraph(Graph):
     return template_path('mobile_index.html')
 
   def _on_success(self):
-    return self.redirect(MobileGraph.get_url())
+    return self.redirect("/m/graph")
 
 class MobileData(RequestHandler):
   def get(self):
@@ -265,14 +269,14 @@ class MobileData(RequestHandler):
     smoothed_iter = weight_data.smoothed_weight_iter(sdate,
                                                      edate,
                                                      gamma=user_info.gamma)
-    template_values = {
+    template_values = Context({
       'user': users.get_current_user(),
       'user_info': user_info,
       'entries': list(smoothed_iter),
       'durations': DEFAULT_DURATIONS,
-    }
-    path = template_path('mobile_data.html')
-    return self.response.out.write(template.render(path, template_values))
+    })
+    t = loader.get_template('mobile_data.html')
+    return self.response.write(str(t.render(template_values)))
 
 class Data(RequestHandler):
   def _render(self, fileform=None, textform=None, successful_command=None):
@@ -290,7 +294,7 @@ class Data(RequestHandler):
     smoothed_iter = weight_data.smoothed_weight_iter(sdate,
                                                      edate,
                                                      gamma=user_info.gamma)
-    template_values = {
+    template_values = Context({
       'user': users.get_current_user(),
       'fileform': fileform,
       'textform': textform,
@@ -298,9 +302,9 @@ class Data(RequestHandler):
       'entries': list(smoothed_iter),
       'durations': DEFAULT_DURATIONS,
       XSRF_TOKEN_NAME: self._xsrf_token,
-    }
-    path = template_path('data.html')
-    return self.response.out.write(template.render(path, template_values))
+    })
+    t = loader.get_template('data.html')
+    return self.response.write(str(t.render(template_values)))
 
   def _add(self):
     submit_type = self.request.get('type')
@@ -317,7 +321,7 @@ class Data(RequestHandler):
     else:
       # Unknown data type: fail silently (mucking about with the form, eh?)
       logging.error("Invalid data submit type: %r", submit_type)
-      return self.redirect(Data.get_url())
+      return self.redirect("/data")
 
     if not activeform.is_valid():
       return self._render(fileform=fileform, textform=textform)
@@ -334,11 +338,11 @@ class Data(RequestHandler):
       except forms.ValidationError, e:
         activeform.errors['csvdata'] = e.messages
         return self._render(fileform=fileform, textform=textform)
-    return self.redirect(Data.get_url())
+    return self.redirect("/data")
 
   def _delete(self):
     # TODO: implement deletion of all data
-    return self.redirect(Data.get_url())
+    return self.redirect("/data")
 
   @xsrf_aware('data', get_current_user_info)
   def post(self):
@@ -350,30 +354,30 @@ class Data(RequestHandler):
     else:
       # fail silently - you can only get here by mucking about with urls
       logging.error("Invalid post command: %r", cmd)
-      return self.redirect(Data.get_url())
+      return self.redirect("/data")
 
   @xsrf_aware('data', get_current_user_info)
   def get(self):
     return self._render()
 
-class MobileSettings(webapp.RequestHandler):
+class MobileSettings(webapp2.RequestHandler):
   def _render(self, user_info, form):
-    template_values = {
+    template_values = Context({
       'user': users.get_current_user(),
       'index_url': '/index',
       'data_url': '/data',
       'form': form,
       XSRF_TOKEN_NAME: self._xsrf_token,
-    }
+    })
 
-    path = self._template_path()
-    self.response.out.write(template.render(path, template_values))
+    t = loader.get_template(self._template_path())
+    return self.response.write(str(t.render(template_values)))
 
   def _template_path(self):
     return template_path('mobile_settings.html')
 
   def _on_success(self):
-    return self.redirect(MobileGraph.get_url())
+    return self.redirect("/m/graph")
 
   @xsrf_aware('data', get_current_user_info)
   def post(self):
@@ -405,7 +409,7 @@ class Settings(MobileSettings):
     return template_path('settings.html')
 
   def _on_success(self):
-    return self.redirect(Graph.get_url())
+    return self.redirect("/graph")
 
 class CsvDownload(RequestHandler):
   def get(self):
@@ -431,44 +435,43 @@ class CsvDownload(RequestHandler):
 
 class Logout(RequestHandler):
   def get(self):
-    self.redirect(users.create_logout_url(Graph.get_url()))
+    self.redirect(users.create_logout_url("/graph"))
 
 class MobileLogout(Logout):
   def get(self):
-    self.redirect(users.create_logout_url(MobileGraph.get_url()))
+    self.redirect(users.create_logout_url("/m/graph"))
 
 class MobileDefaultRoot(RequestHandler):
   def get(self):
-    self.redirect(MobileGraph.get_url())
+    self.redirect("/m/graph")
 
 class DefaultRoot(RequestHandler):
   def get(self):
-    self.redirect(Graph.get_url())
+    self.redirect("/graph")
 
 ##############################################################################
 # Main
 ##############################################################################
 def main():
-  template.register_template_library('templatestuff')
   # In order to allow for a bare "graph" url, we specify it multiple times.
   # You'll see that pattern repeated with other URLs.  This approach allows the
   # somewhat broken Django regex parser to figure out how to generate URLs for
   # {% url %} tags.  It is technically possible to do it with | entries inside
   # of parenthesized expressions, but this confuses Django (it thinks all
   # arguments are required when they aren't.
-  application = webapp.WSGIApplication(
-      [
-        ('/m/graph', MobileGraph),
-        ('/m/data', MobileData),
-        ('/m/settings', MobileSettings),
-        ('/m/logout', MobileLogout),
-        ('/m/?', MobileDefaultRoot),
-        ('/graph', Graph),
-        ('/data', Data),
-        ('/csv', CsvDownload),
-        ('/settings', Settings),
-        ('/logout', Logout),
-        ('/?', DefaultRoot),
+  application = webapp2.WSGIApplication(
+      routes=[
+        (r'/m/graph', MobileGraph),
+        (r'/m/data', MobileData),
+        (r'/m/settings', MobileSettings),
+        (r'/m/logout', MobileLogout),
+        (r'/m/?', MobileDefaultRoot),
+        (r'/graph', Graph),
+        (r'/data', Data),
+        (r'/csv', CsvDownload),
+        (r'/settings', Settings),
+        (r'/logout', Logout),
+        (r'/?', DefaultRoot),
         # TODO: add a default handler - 404
       ],
       debug=True)

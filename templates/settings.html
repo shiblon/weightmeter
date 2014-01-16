@@ -1,7 +1,7 @@
 {% extends "base_template.html" %}
 
 {% block content %}
-<form action="{% url Settings %}" method="POST" class="simple_border">
+<form action="/settings" method="POST" class="simple_border">
 {% include "xsrf_input.html" %}
 <table class="form_table">
   {{ form }}

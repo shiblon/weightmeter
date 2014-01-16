@@ -6,10 +6,10 @@
   <body>
     <div class="medium_text">
       {{ user.email }} |
-      <a href="{% url Graph %}">Home</a> |
-      <a href="{% url Data %}">Data</a> |
-      <a href="{% url Settings %}">Settings</a> ||
-      <a href="{% url Logout %}">Logout</a>
+      <a href="/graph">Home</a> |
+      <a href="/data">Data</a> |
+      <a href="/settings">Settings</a> ||
+      <a href="/logout">Logout</a>
     </div>
     <p/>
     {% block content %}{% endblock %}
@@ -22,7 +22,7 @@
       project by Chris Monson
     </div>
     <div class="small_text centered">
-      View: <b>Normal</b> | <a href="{% url MobileDefaultRoot %}">Mobile</a>
+      View: <b>Normal</b> | <a href="/m">Mobile</a>
     </div>
     {% endblock bottom_credits %}
   </body>

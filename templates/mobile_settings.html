@@ -1,7 +1,7 @@
 {% extends "mobile_base_template.html" %}
 
 {% block content %}
-<form action="{% url MobileSettings %}" method="POST">
+<form action="/m/settings" method="POST">
 {% include "xsrf_input.html" %}
 <table class="form_table">
   {{ form }}

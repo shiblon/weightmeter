@@ -1,7 +1,7 @@
 {% extends "mobile_base_template.html" %}
 
 {% block content %}
-<form method="POST" action="{% url MobileGraph %}">
+<form method="POST" action="/m/graph">
 {% include "xsrf_input.html" %}
   <div class="simple_border medium_text">
     {% include "update_form.html" %}
@@ -13,7 +13,7 @@
     <br>
     <div class="graph_link_text">
     {% for duration in durations %}
-    <a class="graph_link" href="{% url MobileGraph %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+    <a class="graph_link" href="/m/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
     {% endfor %}
     </div>
   </div>

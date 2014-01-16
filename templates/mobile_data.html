@@ -5,7 +5,7 @@
 {% block content %}
 <div class="graph_link_text simple_border">
 {% for duration in durations %}
-<a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+<a class="graph_link" href="/m/data?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
 {% endfor %}
 </div>
 {% if entries %}
@@ -25,7 +25,7 @@ Date <b>scale weight</b> (trend)
 {% endif %}
 <div class="graph_link_text simple_border">
 {% for duration in durations %}
-<a class="graph_link" href="{% url MobileData %}?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+<a class="graph_link" href="/m/data?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
 {% endfor %}
 </div>
 {% endblock content %}
