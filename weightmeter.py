@@ -8,7 +8,6 @@ import os
 import os.path
 import re
 import webapp2
-import wsgiref.handlers
 
 from StringIO import StringIO
 
@@ -449,33 +448,19 @@ class DefaultRoot(RequestHandler):
   def get(self):
     self.redirect("/graph")
 
-##############################################################################
-# Main
-##############################################################################
-def main():
-  # In order to allow for a bare "graph" url, we specify it multiple times.
-  # You'll see that pattern repeated with other URLs.  This approach allows the
-  # somewhat broken Django regex parser to figure out how to generate URLs for
-  # {% url %} tags.  It is technically possible to do it with | entries inside
-  # of parenthesized expressions, but this confuses Django (it thinks all
-  # arguments are required when they aren't.
-  application = webapp2.WSGIApplication(
-      routes=[
-        (r'/m/graph', MobileGraph),
-        (r'/m/data', MobileData),
-        (r'/m/settings', MobileSettings),
-        (r'/m/logout', MobileLogout),
-        (r'/m/?', MobileDefaultRoot),
-        (r'/graph', Graph),
-        (r'/data', Data),
-        (r'/csv', CsvDownload),
-        (r'/settings', Settings),
-        (r'/logout', Logout),
-        (r'/?', DefaultRoot),
-        # TODO: add a default handler - 404
-      ],
-      debug=True)
-  wsgiref.handlers.CGIHandler().run(application)
-
-if __name__ == '__main__':
-  main()
+app = webapp2.WSGIApplication(
+    routes=[
+      (r'/m/graph', MobileGraph),
+      (r'/m/data', MobileData),
+      (r'/m/settings', MobileSettings),
+      (r'/m/logout', MobileLogout),
+      (r'/m/?', MobileDefaultRoot),
+      (r'/graph', Graph),
+      (r'/data', Data),
+      (r'/csv', CsvDownload),
+      (r'/settings', Settings),
+      (r'/logout', Logout),
+      (r'/?', DefaultRoot),
+      # TODO: add a default handler - 404
+    ],
+    debug=True)

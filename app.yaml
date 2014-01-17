@@ -2,7 +2,7 @@ application: weightmeter-hrd
 version: 3
 runtime: python27
 api_version: 1
-threadsafe: no
+threadsafe: yes
 
 handlers:
 - url: /stylesheets
@@ -15,7 +15,7 @@ handlers:
   login: required
 
 - url: /.*
-  script: weightmeter.py
+  script: weightmeter.app
   login: required
 
 libraries:
