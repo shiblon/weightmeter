@@ -1,20 +1,22 @@
 {% extends "mobile_base_template.html" %}
 
 {% block content %}
-<form method="POST" action="/m/graph">
-{% include "xsrf_input.html" %}
-  <div class="simple_border medium_text">
-    {% include "update_form.html" %}
-  </div>
-</form>
-<div class="simple_border chart_image">
-  <div style="width: {{ img.width }}px;">
-    <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}">
-    <br>
-    <div class="graph_link_text">
-    {% for duration in durations %}
-    <a class="graph_link" href="/m/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
-    {% endfor %}
+<div class="content">
+  <form class="mobile" method="POST" action="/m/graph">
+  {% include "xsrf_input.html" %}
+    <div class="simple_border medium_text">
+      {% include "update_form.html" %}
+    </div>
+  </form>
+  <div class="simple_border chart_image">
+    <div style="width: {{ img.width }}px;">
+      <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}">
+      <br>
+      <div class="graph_link_text">
+      {% for duration in durations %}
+      <a class="graph_link" href="/m/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+      {% endfor %}
+      </div>
     </div>
   </div>
 </div>

@@ -1,6 +1,7 @@
 {% extends "base_template.html" %}
 
 {% block content %}
+<div class="main_div">
 <form method="POST" action="/graph">
 {% include "xsrf_input.html" %}
 <div class="simple_border medium_text">
@@ -22,5 +23,6 @@
     {% endfor %}
     </div>
   </div>
+</div>
 </div>
 {% endblock content %}

@@ -5,6 +5,12 @@ body {
   margin-top: 0em;
   margin-left: 1em;
   margin-right: 1em;
+  text-align: center;
+}
+
+div.content {
+  text-align: center;
+  margin: elastic;
 }
 
 .graph_link_text {
@@ -78,6 +84,10 @@ fieldset {
 
 .chart_image {
   margin-top: .25em;
+}
+
+div.main_div {
+  display: inline-block;
 }
 
 .main_table {

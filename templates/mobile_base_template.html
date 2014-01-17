@@ -1,10 +1,13 @@
 <html>
   <head>
     <title>{% block title %}Weight Meter{% endblock %}</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="viewport" content="initial-scale=1.0">
     <link rel="stylesheet" href="/stylesheets/main.css">
+    <script type="text/javascript" src="https://www.google.com/jsapi"></script>
   </head>
   <body>
-  <table class="main_table"><tr><td>
+  <div class="main_div">
     <p class="small_text">
       {{ user.email }} |
       <a href="/m/graph">Home</a> |
@@ -25,6 +28,6 @@
       View: <a href="/">Normal</a> | <b>Mobile</b>
     </div>
     {% endblock bottom_credits %}
-  </td></tr></table>
+  </div>
   </body>
 </html>
