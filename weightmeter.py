@@ -448,6 +448,7 @@ class DefaultRoot(RequestHandler):
   def get(self):
     self.redirect("/graph")
 
+# This needs to be in the global scope, as the application is now run by the appengine runtime, not called as a CGI script.
 app = webapp2.WSGIApplication(
     routes=[
       (r'/m/graph', MobileGraph),
