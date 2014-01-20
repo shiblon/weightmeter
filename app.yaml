@@ -5,9 +5,11 @@ api_version: 1
 threadsafe: yes
 
 handlers:
-- url: /stylesheets
-  static_dir: stylesheets
-  login: required
+- url: /css
+  static_dir: css
+
+- url: /js
+  static_dir: js
 
 - url: /favicon.ico
   static_files: static/images/favicon.ico

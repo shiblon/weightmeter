@@ -2,6 +2,7 @@ from __future__ import division
 
 import csv
 import datetime
+import json
 import logging
 import math
 import os
@@ -23,6 +24,8 @@ except ImportError:
 
 from django.template import Context
 from django.template import loader
+
+from util import forms as my_forms
 
 # TODO
 # - fix non-mobile site and launch version 2.0
@@ -201,7 +204,7 @@ class Graph(RequestHandler):
     return self.response.write(str(t.render(template_values)))
 
   def _template_path(self):
-    return template_path('graph.html')
+    return template_path('index.html')
 
   def _on_success(self):
     return self.redirect("/graph")
@@ -277,9 +280,41 @@ class MobileData(RequestHandler):
     t = loader.get_template('mobile_data.html')
     return self.response.write(str(t.render(template_values)))
 
+class ApiChartData(RequestHandler):
+  def get(self):
+    today = datetime.date.today()
+    start = self.request.get('s', DEFAULT_GRAPH_DURATION)
+    end = self.request.get('e', '')
+    # Get the number of samples. A bit circular because we're converting from
+    # string and trying to let 0 be special all at the same time (zero means
+    # "all").
+    samples = self.request.get('samples', None)
+    if samples.lower() == 'none':
+      samples = None
+    if samples:
+      samples = int(samples)
+    if samples <= 0:
+      samples = None
+    sdate, edate = dates_from_args(start, end, today)
+    user_info = get_current_user_info()
+    weight_data = WeightData(user_info)
+    smoothed_iter = weight_data.smoothed_weight_iter(sdate,
+                                                     edate,
+                                                     samples,
+                                                     gamma=user_info.gamma)
+    self.response.headers['Content-Type'] = 'application/json'
+    obj = {
+      'data': {
+        'columns': ['Date', 'Weight', 'Smoothed'],
+        'rows': list((str(d), w, s) for d, w, s in smoothed_iter),
+      }
+    }
+    return self.response.write(json.dumps(obj))
+
 class Data(RequestHandler):
   def _render(self, fileform=None, textform=None, successful_command=None):
     if fileform is None:
+      # TODO: kill this. It doesn't work anymore. Uploads will have to be handled differently.
       fileform = CSVFileForm()
     if textform is None:
       textform = CSVTextForm()
@@ -308,35 +343,44 @@ class Data(RequestHandler):
   def _add(self):
     submit_type = self.request.get('type')
     if submit_type == 'file':
-      # POST a file
-      fileform = CSVFileForm(self.request)
-      textform = CSVTextForm()  # for template output
-      activeform = fileform
-    elif submit_type == 'text':
-      # POST a textarea
-      fileform = CSVFileForm()  # for template output
-      textform = CSVTextForm(self.request)
-      activeform = textform
-    else:
-      # Unknown data type: fail silently (mucking about with the form, eh?)
-      logging.error("Invalid data submit type: %r", submit_type)
-      return self.redirect("/data")
-
-    if not activeform.is_valid():
-      return self._render(fileform=fileform, textform=textform)
-    else:
-      # Cleaned data is a date,weight pair iterator
       user_info = get_current_user_info()
       weight_data = WeightData(user_info)
+      # NOTE: we can't use Django form validation anymore because it doesn't do
+      # file uploads properly without a database. That's total overkill for us.
+      csvdata = self.request.POST['csvdata']
       try:
-        entries = list(activeform.cleaned_data['csvdata'])
+        # Cleaned data is a date,weight pair iterator
+        entries = list(my_forms.csv_row_iter(csvdata.file))
         if entries:
           weight_data.batch_update(entries)
         else:
           raise forms.ValidationError("No valid entries specified")
       except forms.ValidationError, e:
-        activeform.errors['csvdata'] = e.messages
+        fileform.errors['csvdata'] = e.messages
         return self._render(fileform=fileform, textform=textform)
+    elif submit_type == 'text':
+      # POST a textarea
+      fileform = CSVFileForm()  # for template output
+      textform = CSVTextForm(self.request)
+      if not textform.is_valid():
+        return self._render(fileform=fileform, textform=textform)
+      # Cleaned data is a date,weight pair iterator
+      user_info = get_current_user_info()
+      weight_data = WeightData(user_info)
+      try:
+        entries = list(textform.cleaned_data['csvdata'])
+        if entries:
+          weight_data.batch_update(entries)
+        else:
+          raise forms.ValidationError("No valid entries specified")
+      except forms.ValidationError, e:
+        textform.errors['csvdata'] = e.messages
+        return self._render(fileform=fileform, textform=textform)
+    else:
+      # Unknown data type: fail silently (mucking about with the form, eh?)
+      logging.error("Invalid data submit type: %r", submit_type)
+      return self.redirect("/data")
+
     return self.redirect("/data")
 
   def _delete(self):
@@ -456,6 +500,7 @@ app = webapp2.WSGIApplication(
       (r'/m/settings', MobileSettings),
       (r'/m/logout', MobileLogout),
       (r'/m/?', MobileDefaultRoot),
+      (r'/api/chartdata', ApiChartData),
       (r'/graph', Graph),
       (r'/data', Data),
       (r'/csv', CsvDownload),

@@ -1,4 +1,4 @@
-{% extends "mobile_base_template.html" %}
+{% extends "base_template.html" %}
 
 {% block scripts %}
 <script type="text/javascript" src="https://www.google.com/jsapi"></script>
@@ -15,7 +15,7 @@
 
 {% block content %}
 <div ng-controller="ChartController" class="main_div">
-  <form class="mobile" method="POST" action="/m/graph">
+  <form method="POST" action="/graph">
     {% include "xsrf_input.html" %}
     <div class="simple_border medium_text">
       {% include "update_form.html" %}
@@ -23,12 +23,17 @@
   </form>
   <div class="simple_border chart_image">
     <div style="width: {{ img.width }}px;">
+      <div class="graph_link_text">
+        {% for duration in durations %}
+        <a class="graph_link" href="/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+        {% endfor %}
+      </div>
       <div id="chart_div" style="width: {{ img.width }}px; height: {{ img.height }}px;"></div>
       <!-- <img width="{{ img.width }}" height="{{ img.height }}" src="{{ img.url }}"> -->
       <br>
       <div class="graph_link_text">
         {% for duration in durations %}
-        <a class="graph_link" href="/m/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
+        <a class="graph_link" href="/graph?s={{duration}}">{{ duration }}</a>{% if not forloop.last %} |{% endif %}
         {% endfor %}
       </div>
     </div>

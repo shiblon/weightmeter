@@ -136,7 +136,6 @@ class WeightData(object):
     # Iterate over all of the non-empty dates from start_day to end_day within
     # the blocks:
     for block in query:
-      logging.debug("block %d", block.day_zero)
       for rel_day, weight in enumerate(block.weight_entries):
         day = rel_day + block.day_zero
         if start_day <= day <= end_day and weight >= 0.0:
@@ -164,7 +163,7 @@ class WeightData(object):
 
   def update(self, date, weight):
     """Update the weight for a given date
-    
+
     Args:
       date: the day to update
       weight: the weight to update
