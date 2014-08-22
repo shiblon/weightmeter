@@ -39,7 +39,7 @@ app.controller('ChartController', function($scope, $http) {
       var options = {
         "title": "",
         "lineWidth": 1,
-        "chartArea": {"left": "10%", "width": "80%", "top": "5%", "height": "75%"},
+        "chartArea": {"left": "15%", "width": "80%", "top": "5%", "height": "75%"},
         "hAxis": {"gridlines": {"color": "#eee"},
                   "textStyle": {"fontSize": 10}},
         "vAxis": {"gridlines": {"color": "#eee"},
