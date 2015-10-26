@@ -8,6 +8,10 @@ body {
   text-align: center;
 }
 
+#id_weight {
+  width: 6em;
+}
+
 div.content {
   text-align: center;
   margin: elastic;

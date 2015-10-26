@@ -94,22 +94,29 @@ def chart_url(weight_data, width, height, start, end, gamma):
 # Forms
 ##############################################################################
 
-class WeightChoiceForm(forms.Form):
-  date = DateSelectField()
-  weight = FloatRangeSelectField(reversed=True)
+def make_choice_form(resolution=0.5):
+  class WeightChoiceForm(forms.Form):
+    date = DateSelectField()
+    weight = FloatRangeSelectField(resolution=resolution, reversed=True)
+  return WeightChoiceForm
 
-class WeightEntryForm(forms.Form):
-  date = DateSelectField()
-  weight = FloatField(max_length=7, widget=forms.TextInput(attrs={'size': 5}))
+class NumberInput(forms.TextInput):
+  input_type = 'number'
+
+def make_entry_form(resolution=0.5):
+  class WeightEntryForm(forms.Form):
+    date = DateSelectField()
+    weight = FloatField(
+        max_length=7,
+        widget=NumberInput(attrs={
+          'step': resolution}))
+  return WeightEntryForm
 
 class CSVFileForm(forms.Form):
   csvdata = CSVWeightField(widget=forms.FileInput)
 
 class CSVTextForm(forms.Form):
-  csvdata = CSVWeightField(widget=forms.Textarea(attrs={
-                                                 'rows': 8,
-                                                 'cols': 30,
-                                                 }))
+  csvdata = CSVWeightField(widget=forms.Textarea(attrs=dict(rows=8, cols=30)))
 
 class SettingsForm(forms.Form):
   scale_resolution = FloatSelectField(
@@ -194,7 +201,7 @@ class Graph(RequestHandler):
         'form': form,
         'durations': DEFAULT_DURATIONS,
         'alternate_form_style': {
-          'url': "/graph?fs=%s" % (afs,),
+          'url': "graph?fs=%s" % (afs,),
           'name': afs,
           },
         XSRF_TOKEN_NAME: self._xsrf_token,
@@ -211,15 +218,13 @@ class Graph(RequestHandler):
 
   def _make_weight_form(self, *args, **kargs):
     form_style = self._form_style()
+    user_info = kargs.get('user_info')
+    if not user_info:
+      user_info = get_current_user_info()
     if form_style == 'list':
-      form = WeightChoiceForm(*args, **kargs)
-      # Fill in the appropriate choice field parameters from user info
-      user_info = kargs.get('user_info')
-      if not user_info:
-        user_info = get_current_user_info()
-      form.fields['weight'].resolution = user_info.scale_resolution
+      form = make_choice_form(user_info.scale_resolution)(*args, **kargs)
     elif form_style == 'text':
-      form = WeightEntryForm(*args, **kargs)
+      form = make_entry_form(user_info.scale_resolution)(*args, **kargs)
     else:
       raise ValueError("Invalid form style specified: %s" % form_style)
 
